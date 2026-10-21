@@ -1,13 +1,13 @@
 # cloudflare-family.rsc
 # Complete, self-contained example for Cloudflare Family DoH (1.1.1.3 / 1.0.0.3),
 # as tested on RouterOS 7.23.1 / 7.24.5. Run after uploading
-# certs/cloudflare-doh-ca.pem to the router.
+# certs/cloudflare-doh-ca.crt to the router.
 
 # 1) NTP first (certificate validation needs accurate time)
 /system ntp client set enabled=yes servers=162.159.200.1,216.239.35.0
 
 # 2) Trust anchor
-/certificate import file-name=cloudflare-doh-ca.pem passphrase=""
+/certificate import file-name=cloudflare-doh-ca.crt passphrase=""
 /certificate set [find where name~"cloudflare-doh-ca"] trusted=yes
 
 # 3) Bootstrap static A records (so the DoH hostname always resolves)

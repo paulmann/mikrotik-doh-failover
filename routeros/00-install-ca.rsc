@@ -12,10 +12,10 @@
 # For Cloudflare family / security / standard DoH the chain is:
 #   Cloudflare Inc -> SSL.com -> Comodo AAA
 # so the required root is "SSL.com TLS ECC Root CA 2022".
-# The PEM file is shipped in certs/cloudflare-doh-ca.pem. Upload it to the
+# The PEM file is shipped in certs/cloudflare-doh-ca.crt. Upload it to the
 # router (WinBox -> Files, or scp/SFTP), then run:
 
-/certificate import file-name=cloudflare-doh-ca.pem passphrase=""
+/certificate import file-name=cloudflare-doh-ca.crt passphrase=""
 /certificate set [find where name~"cloudflare-doh-ca"] trusted=yes
 
 # Verify: you must see a TRUSTED cert "SSL.com TLS ECC Root CA 2022".

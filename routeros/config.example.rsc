@@ -15,7 +15,7 @@
 # Google:                               use https://dns.google/dns-query, 8.8.8.8,8.8.4.4
 
 # --- CA (00-install-ca.rsc) ---
-# Cloudflare DoH chain root: SSL.com TLS ECC Root CA 2022  (certs/cloudflare-doh-ca.pem)
+# Cloudflare DoH chain root: SSL.com TLS ECC Root CA 2022  (certs/cloudflare-doh-ca.crt)
 # Quad9/Google need their own root CA; take it from the provider's site.
 
 # --- Network / firewall (02-security-policies.rsc) ---

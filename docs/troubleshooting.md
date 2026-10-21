@@ -20,7 +20,7 @@ does not cover the Cloudflare DoH chain, and `builtin-trust-anchors` is not a
 parameter at all. Import the CA explicitly.
 
 ```rsc
-/certificate import file-name=cloudflare-doh-ca.pem passphrase=""
+/certificate import file-name=cloudflare-doh-ca.crt passphrase=""
 /certificate set [find where name~"cloudflare-doh-ca"] trusted=yes
 ```
 
@@ -44,8 +44,18 @@ setup does not depend on DNS (chicken-and-egg):
 
 On `home` devices `/tool fetch` and `/system scheduler add` are rejected with
 `not allowed by device-mode`. DoH and force-DNS still work. Verify with
-`ping <domain>` + `/ip dns cache print`, and run the monitor manually; the only
-way to automate is to switch the device to `advanced` (owner decision, reboot).
+`ping <domain>` + `/ip dns cache print`, and run the monitor manually.
+
+```rsc
+/system script run DNS_HealthMonitor_Failover    # manual run
+```
+
+To enable the scheduler, switch the device to `advanced` (owner decision,
+then confirm and reboot):
+
+```rsc
+/system/device-mode/update device-mode=advanced
+```
 
 ## 6.5 force-DNS: prefer `redirect`
 

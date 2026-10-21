@@ -8,13 +8,13 @@
 # Security notes:
 #   - Do NOT download a CA bundle over an untrusted channel with
 #     check-certificate=no: an attacker on the path could substitute the bundle.
-#     Prefer the specific CA from the CA's own site (certs/cloudflare-doh-ca.pem)
+#     Prefer the specific CA from the CA's own site (certs/cloudflare-doh-ca.crt)
 #     and verify its fingerprint.
 #   - Do NOT toggle "verify-doh-cert=no/yes" to "reset the TLS session"; that
 #     briefly disables certificate validation and is not a documented mechanism.
 
 # ===== CONFIG =====
-:local caFile "cloudflare-doh-ca.pem"   # already uploaded to the router
+:local caFile "cloudflare-doh-ca.crt"   # already uploaded to the router
 # ==================
 
 /certificate import file-name=$caFile passphrase=""

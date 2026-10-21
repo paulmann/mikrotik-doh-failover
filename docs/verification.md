@@ -61,3 +61,21 @@ Restore after each destructive test:
 On `home` devices `/tool fetch` returns `not allowed by device-mode` and
 `/system scheduler add` is rejected. Verify DoH there with `ping <domain>` and
 `/ip dns cache print` instead, and run the monitor by hand.
+
+## Verified results (2026-10-22)
+
+Observed on the fleet (RouterOS 7.23.1 / 7.24.5):
+
+| Check | Command | Observed |
+|---|---|---|
+| CA import | `/certificate import file-name=cacert.pem` | 118 CAs imported; `trusted=yes` set |
+| CA required | untrust all imported CAs, `:resolve example.com` | `failure: dns server failure` — import is mandatory |
+| builtin store | `/certificate settings set builtin-trust-anchors=trusted` | `bad parameter` — the parameter is `builtin-trust-store` |
+| DoH resolve | `:resolve example.com` | real IP (`8.6.112.0` / `8.47.69.0`) |
+| family filter | `:resolve pornhub.com` | `0.0.0.0` on all five devices |
+| `:resolve server=` | `:resolve cloudflare.com server=1.1.1.3` | `104.16.132.229` (supported) |
+| `:resolve timeout=` | `:resolve cloudflare.com timeout=5s` | `bad parameter timeout` (not supported) |
+| failover down | set bogus `use-doh-server`, run monitor | mode `plain`, `use-doh-server=""` |
+| failover restore | restore DoH, run monitor | mode `doh`, `use-doh-server` restored |
+| bootstrap | `/ip dns static print where name="family.cloudflare-dns.com"` | `1.1.1.3` / `1.0.0.3` |
+
