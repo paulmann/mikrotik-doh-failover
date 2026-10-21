@@ -1,0 +1,14 @@
+flowchart TD
+    Start["monitor runs (3m)"] --> ReadMode["read DNSCurrentMode"]
+    ReadMode --> IsDoh{"mode == doh?"}
+    IsDoh -->|"yes"| TestDoh[":resolve testDomain"]
+    TestDoh --> DohOk{"resolved?"}
+    DohOk -->|"yes"| NoOp["nothing (stable)"]
+    DohOk -->|"no"| TestPlain[":resolve testDomain server=1.1.1.3"]
+    TestPlain --> PlainOk{"resolved?"}
+    PlainOk -->|"yes"| SwitchPlain["use-doh-server=''<br/>flush cache<br/>mode=plain<br/>log error"]
+    PlainOk -->|"no"| Critical["log critical<br/>all paths down"]
+    IsDoh -->|"no (plain)"| TryRestore["use-doh-server=DoH<br/>then :resolve testDomain"]
+    TryRestore --> RestoreOk{"resolved?"}
+    RestoreOk -->|"yes"| SwitchDoh["flush cache<br/>mode=doh<br/>log warning"]
+    RestoreOk -->|"no"| StayPlain["use-doh-server=''<br/>log info"]

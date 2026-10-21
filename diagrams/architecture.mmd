@@ -1,0 +1,10 @@
+flowchart LR
+    Client["LAN client"] -->|"DNS 53"| ForceDNS["force-DNS redirect<br/>(dstnat redirect UDP+TCP)"]
+    ForceDNS --> Resolver["Router resolver<br/>allow-remote-requests=yes"]
+    Resolver -->|"cache hit"| Client
+    Resolver --> Mode{"DoH healthy?"}
+    Mode -->|"yes"| DoH["DoH upstream<br/>family.cloudflare-dns.com<br/>verify-doh-cert=yes"]
+    Mode -->|"no"| Plain["plain family DNS<br/>1.1.1.3 / 1.0.0.3"]
+    Monitor["health monitor<br/>every 3 min"] -->|"flips use-doh-server"| Resolver
+    CA["Trusted CA<br/>SSL.com TLS ECC Root CA 2022"] -->|"TLS validation"| DoH
+    NTP["NTP synchronized"] -->|"accurate clock"| CA

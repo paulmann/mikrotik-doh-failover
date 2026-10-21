@@ -1,0 +1,7 @@
+flowchart TD
+    Start["CA refresh triggered"] --> Upload["CA file already on router<br/>(certs/cloudflare-doh-ca.pem)"]
+    Upload --> Import["/certificate import file-name=..."]
+    Import --> Trust["/certificate set [find name~cloudflare-doh-ca] trusted=yes"]
+    Trust --> Verify{"trusted=yes visible?"}
+    Verify -->|"yes"| Done["done"]
+    Verify -->|"no"| Fail["log error<br/>wrong CA or not trusted"]

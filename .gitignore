@@ -1,0 +1,10 @@
+# Local machine-only index (never commit)
+.ragraf/
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.log
+
+# RouterOS binary backups and exports are environment-specific
+*.backup
