@@ -8,3 +8,7 @@ Thumbs.db
 
 # RouterOS binary backups and exports are environment-specific
 *.backup
+
+# local scratch/work directories
+_work*/
+_scratch*/
