@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The project follows
 ## [Unreleased]
 
 ### Added
+- `AGENTS.md` — agent-facing operational contract: fetch, apply, verify and roll back
+  on RouterOS, with the measured expected outputs and the deliberate limits.
 - `assets/social-preview.png` (1280x640) — README header banner and repository
   social preview, and the banner is now embedded in `README.md` under the badges.
 
