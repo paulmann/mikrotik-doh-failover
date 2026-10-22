@@ -8,6 +8,10 @@
 [![Release](https://img.shields.io/github/v/release/paulmann/mikrotik-doh-failover?label=release&sort=semver)](https://github.com/paulmann/mikrotik-doh-failover/releases)
 [![RouterOS](https://img.shields.io/badge/RouterOS-7.20%2B-red)](https://help.mikrotik.com/docs/spaces/ROS/pages/37748767/DNS)
 
+<img src="https://github.com/paulmann/mikrotik-doh-failover/raw/main/assets/social-preview.png"
+     alt="mikrotik-doh-failover: one verified DoH upstream for RouterOS, with a plain-DNS fallback that flips use-doh-server automatically"
+     width="100%">
+
 RouterOS routes a LAN's DNS through the router, but by default that upstream leg
 is plaintext. This project configures one **verified** DoH upstream with a
 plain-DNS fallback, forces classic LAN DNS to the router, and adds a scheduled

@@ -3,6 +3,12 @@
 All notable changes to this project are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `assets/social-preview.png` (1280x640) — README header banner and repository
+  social preview, and the banner is now embedded in `README.md` under the badges.
+
 ## [v0.1.0] - 2026-10-22
 
 Initial tested release.
