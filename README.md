@@ -1,5 +1,8 @@
 # mikrotik-doh-failover
 
+<!-- md-i18n:switcher -->
+**Read this in:** English · [Deutsch](README.de.md) · [中文](README.zh.md) · [हिन्दी](README.hi.md) · [Español](README.es.md) · [Русский](README.ru.md)
+
 **Failover DNS-over-HTTPS (DoH) configuration for MikroTik RouterOS, as diffable `.rsc` scripts.**
 
 [**Docs**](docs/) · [**Releases**](https://github.com/paulmann/mikrotik-doh-failover/releases) · [**Changelog**](CHANGELOG.md) · [**Issues**](https://github.com/paulmann/mikrotik-doh-failover/issues) · [**Security**](SECURITY.md) · [**For agents**](AGENTS.md)
