@@ -1,0 +1,11 @@
+[Unit]
+Description=Run DoH/VPN collector every 2 minutes
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=2min
+AccuracySec=10s
+Unit=doh-zabbix-collector.service
+
+[Install]
+WantedBy=timers.target

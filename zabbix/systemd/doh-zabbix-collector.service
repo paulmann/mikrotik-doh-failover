@@ -1,0 +1,11 @@
+[Unit]
+Description=Zabbix collector: DoH and VPN state from MikroTik fleet
+Documentation=https://github.com/paulmann/mikrotik-doh-failover
+After=network-online.target zabbix-server.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/local/bin/doh-zabbix-collector.py
+Nice=10
+TimeoutStartSec=600

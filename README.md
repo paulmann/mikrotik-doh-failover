@@ -203,6 +203,7 @@ only be run manually. Options:
 | [`docs/architecture.md`](docs/architecture.md) | design rationale and threat model |
 | [`docs/verification.md`](docs/verification.md) | per-subsystem checks + failover test checklist |
 | [`docs/troubleshooting.md`](docs/troubleshooting.md) | known failures and workarounds |
+| [`zabbix/README.md`](zabbix/README.md) | fleet monitoring in Zabbix: DoH and VPN state, triggers, service tree |
 | [`routeros/config.example.rsc`](routeros/config.example.rsc) | all tunable values |
 
 ## Contributing

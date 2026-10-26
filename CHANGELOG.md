@@ -3,6 +3,14 @@
 All notable changes to this project are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- `zabbix/` — fleet monitoring for Zabbix 8: a collector that reads DoH state
+  (`/ip dns use-doh-server`, three canaries) and VPN state (WireGuard peers,
+  handshake age) from every router over SSH and pushes it as trapper items;
+  six triggers and two service trees (`DoH на микротиках`, `VPN -> Микротики`).
+- `zabbix/systemd/` — timer and service units (run every 2 minutes).
 ## [v0.2.0] - 2026-10-26
 
 Default upstream changed to the standard (non-filtering) resolver; failover now
