@@ -7,16 +7,17 @@ to be reproducible and criticizable, not to over-promise.
 
 The goal is a RouterOS box whose DNS traffic to the provider is encrypted and
 whose LAN clients are pushed through the router resolver, with an automatic
-fallback when the encrypted path fails.
+switch to a second encrypted endpoint when the first fails.
 
 What the design **actually** guarantees:
 
 - DNS queries sent by the **router** to the upstream travel over HTTPS (DoH) and
   the upstream's TLS certificate is verified.
-- A single DoH upstream is active; on failure the router temporarily falls back
-  to plain family DNS, then returns to DoH after recovery.
+- A single DoH upstream is active; when it stops answering the monitor switches
+  to a second DoH endpoint, verifies that the switch works, and returns to the
+  primary after recovery.
 - Classic DNS (UDP/TCP 53) from the LAN is redirected to the router, so clients
-  that obey DHCP/DNS get the filtered resolver.
+  that obey DHCP/DNS get the router's resolver.
 
 What it does **not** guarantee:
 
@@ -25,6 +26,9 @@ What it does **not** guarantee:
   blocking client DoH over 443 needs a proxy/DPI.
 - It does **not** make the resolver trustworthy by itself: choosing Cloudflare,
   Quad9 or Google is a decision to trust that third party.
+- It does **not** make an unreachable answer reachable. If the upstream answers
+  with addresses that this network cannot reach, DNS-level changes cannot fix
+  that — see `docs/troubleshooting.md` §6.10.
 
 ## 2. Component map
 
@@ -33,11 +37,13 @@ flowchart LR
     Client[LAN client] -->|DNS 53| ForceDNS[force-DNS redirect]
     ForceDNS --> Resolver[Router resolver]
     Resolver -->|cache hit| Client
-    Resolver --> Mode{DoH healthy?}
-    Mode -->|yes| DoH[DoH upstream<br/>verify-doh-cert=yes]
-    Mode -->|no| Plain[plain family DNS<br/>1.1.1.3 / 1.0.0.3]
-    Monitor[health monitor<br/>every 3 min] -->|flips use-doh-server| Resolver
+    Resolver --> Mode{DoH endpoint answers?}
+    Mode -->|yes| DoH[DoH A<br/>verify-doh-cert=yes]
+    Mode -->|no| DoHB[DoH B<br/>switched by monitor]
+    Monitor[health monitor<br/>every 3 min] -->|content check + probe| Resolver
+    Monitor -->|switch / rollback| Mode
     CA[Trusted CA] -->|TLS validation| DoH
+    CA -->|TLS validation| DoHB
     NTP[NTP] -->|accurate clock| CA
 ```
 
@@ -59,7 +65,9 @@ Two facts that differ from some blog guidance:
 
 For Cloudflare the chain is `Cloudflare Inc → SSL.com → Comodo AAA`, so the
 required root is **`SSL.com TLS ECC Root CA 2022`** (shipped in `certs/`).
-Quad9 and Google need their own root CA.
+Quad9 and Google need their own root CA — which matters for the fallback: if the
+fallback host's CA is missing, `verify-doh-cert=yes` rejects it, the monitor sees
+no resolution after switching and rolls back (and says so in the log).
 
 ### 3.2 DNS and redundancy
 
@@ -67,11 +75,15 @@ RouterOS supports exactly **one** active DoH server. There is no native
 "backup DoH" and `/ip dns static-server type=doh` is not a real failover
 mechanism. Redundancy is therefore:
 
-- `servers=1.1.1.3,1.0.0.3` — plain upstreams used as bootstrap and as fallback;
-- static A records for the DoH hostname so it resolves even when plain DNS is
-  down (breaks the chicken-and-egg dependency);
-- the failover script, which clears `use-doh-server` on failure and restores it
-  on recovery.
+- `servers=` — plain upstreams used **only** as bootstrap for the DoH hostname;
+- static A records for **both** endpoint hostnames, so the monitor's HTTPS probe
+  can reach them even when the resolver itself is dead (chicken-and-egg);
+- the failover script, which switches the active endpoint to a second DoH.
+
+Since 0.2.0 the fallback is another **DoH** endpoint, not plain DNS. Measured
+2026-10-26 from two independent vantage points: plain queries — even straight to
+`1.1.1.1` and `8.8.8.8` — came back with substituted answers, so "fall back to
+plain" converts a visible outage into a silent one.
 
 ### 3.3 Security policies
 
@@ -83,6 +95,12 @@ mechanism. Redundancy is therefore:
   is not an open resolver.
 - Optional `forward` drop of TCP 853 (DoT) to reduce bypass.
 
+**Known limit (measured 2026-10-26):** redirect does not apply to clients that
+already use the router as their resolver — their query is answered locally and
+never enters `dstnat`. Per-client resolver policies built on dst-nat therefore do
+not work for those clients; hand the resolver out over DHCP or run a separate
+resolver instead.
+
 ### 3.4 CAPsMAN
 
 Only for the legacy `/caps-man` stack and only on the controller. The example
@@ -93,18 +111,32 @@ should be configured there instead.
 
 ### 3.5 Monitoring and failover
 
-The monitor runs every 3 minutes and holds its state in a global variable.
+The monitor runs every 3 minutes, keeps its state in two globals
+(`DNSMonitorState`, `DNSFailoverAttempts`) and logs only on transitions, so a
+broken resolver does not flood the log.
+
+Two independent measurements per run:
+
+1. **Are the answers usable?** Three canary names are resolved through the live
+   resolver and the result is judged by content: empty, `0.0.0.0` and the stub
+   pair `8.6.112.0`/`8.47.69.0` all count as unusable. v1 judged only the type
+   (`ip`), which is why it called the stub pair healthy.
+2. **Does each endpoint answer?** Both endpoints are probed with `/tool fetch`
+   against their DNS-JSON API. This does not touch `/ip dns`, so a check no
+   longer takes the LAN off DoH the way v1 did.
 
 | State | Condition | Action | Log |
 |---|---|---|---|
-| normal | DoH answers | keep DoH | — |
-| DoH down | `:resolve` fails, plain answers | switch to plain | `error` |
-| all down | both fail | keep last config, count | `critical` |
-| recovered | DoH answers again | switch back to DoH | `warning` |
+| `healthy` | at least one canary returns a real address | if on the fallback, switch back to primary; reset attempts | `info`/`warning` on transition |
+| `stub` | answers are the stub pair | nothing — a second endpoint returns the same pair | `warning` once |
+| `dead` | no usable answers, endpoint answering | flush cache, re-check next run | `warning` once |
+| `failoverB` | primary unreachable, fallback probed OK, switch verified | stay on fallback; try to come home each run | `warning` once |
+| `dead` (both) | neither endpoint reachable | keep the current configuration | `error` once |
 
-Checks use the real resolver path (`:resolve <domain>`), not an HTTP-status
-heuristic: `:resolve <domain> server=1.1.1.3` issues a direct plain query and is
-used to test the fallback independently of the broken DoH.
+A failover is attempted at most `maxAttempts` (3) times per outage; the fallback
+is probed **before** switching and the switch is verified **after**, with an
+automatic rollback to the primary if the fallback does not resolve. The router
+therefore never ends up parked on a dead endpoint.
 
 ## 4. Threat model
 
@@ -113,6 +145,9 @@ used to test the fallback independently of the broken DoH.
 - **Provider / DNS operator**: sees the plaintext DNS (after decryption at the
   DoH endpoint). The design does not add DNSSEC-verification of answers; TLS
   protects the transport, not the answer authenticity.
+- **Answer substitution on the path**: measured in Russia for plain DNS; DoH is
+  not affected, but a substituted *plain* fallback would go unnoticed without the
+  content check.
 - **MITM on the CA bootstrap**: mitigated by importing the specific CA from a
   trusted source and verifying its fingerprint; `check-certificate=no` is a
   one-time bootstrap only.

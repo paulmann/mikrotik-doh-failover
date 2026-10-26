@@ -12,13 +12,13 @@
 [![RouterOS](https://img.shields.io/badge/RouterOS-7.20%2B-red)](https://help.mikrotik.com/docs/spaces/ROS/pages/37748767/DNS)
 
 <img src="https://github.com/paulmann/mikrotik-doh-failover/raw/main/assets/social-preview.png"
-     alt="mikrotik-doh-failover: one verified DoH upstream for RouterOS, with a plain-DNS fallback that flips use-doh-server automatically"
+     alt="mikrotik-doh-failover: one verified DoH upstream for RouterOS, with a second verified DoH endpoint as failover"
      width="100%">
 
 RouterOS routes a LAN's DNS through the router, but by default that upstream leg
 is plaintext. This project configures one **verified** DoH upstream with a
-plain-DNS fallback, forces classic LAN DNS to the router, and adds a scheduled
-health-check that switches between DoH and plain DNS on failure. It is the
+second verified DoH endpoint as failover, forces classic LAN DNS to the router,
+and adds a scheduled health-check that switches endpoints on failure. It is the
 "how to reproduce and maintain" companion to the article
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 on `sysadministrator.ru`.
@@ -56,13 +56,14 @@ silently stops all resolution.
 
 This project avoids both:
 
-- **one active DoH upstream**, with plain `servers` as bootstrap and fallback;
-- **a managed failover** script that clears `use-doh-server` on failure and
-  restores it after recovery;
+- **one active DoH upstream** — standard Cloudflare by default, no filtering;
+  plain `servers` are bootstrap only and are never used as a working fallback;
+- **a managed failover** script that switches to a second DoH endpoint on
+  failure, verifies the switch and returns to the primary after recovery;
 - **an explicit CA import** — verified that the built-in trust store does not
   cover the Cloudflare chain on 7.23/7.24;
-- **bootstrap static A records** so the DoH hostname resolves even if plain DNS
-  is down.
+- **bootstrap static A records for both endpoint hosts**, so the health probe
+  can reach them even when the resolver itself is dead.
 
 Every claim in this README and in `docs/` was verified on real devices; the
 version and `device-mode` are stated where behaviour differs.
@@ -72,9 +73,10 @@ version and `device-mode` are stated where behaviour differs.
 | Capability | Detail |
 |---|---|
 | Encrypted upstream | one DoH upstream with `verify-doh-cert=yes` |
-| Fallback | plain family DNS (`1.1.1.3,1.0.0.3`) when DoH is unreachable |
-| Recovery | automatic return to DoH after the health check passes |
-| Bootstrap | static A records for the DoH hostname |
+| Fallback | a second **DoH** endpoint (Google) when the primary is unreachable |
+| Recovery | automatic return to the primary after the health check passes |
+| Health check | judges the ANSWER (content), not the type; probes endpoints with `/tool fetch` |
+| Bootstrap | static A records for both endpoint hostnames |
 | Force classic DNS | `dstnat redirect` of UDP/TCP 53 from the LAN bridge |
 | Resolver protection | drop DNS from WAN, accept from LAN (UDP and TCP) |
 | Failover policy | `read,write,policy,test` only (no `ftp`/`reboot`/`password`) |
@@ -100,7 +102,7 @@ flowchart LR
     ForceDNS --> Resolver["Router resolver"]
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH upstream<br/>verify-doh-cert=yes"]
-    Mode -->|"no"| Plain["plain family DNS"]
+    Mode -->|"no"| Plain["second DoH endpoint"]
     Monitor["health monitor 3m"] -->|"flips use-doh-server"| Resolver
     CA["Trusted CA"] -->|"TLS validation"| DoH
     NTP["NTP"] -->|"clock"| CA
@@ -123,7 +125,7 @@ Requirements:
 - NTP synchronized;
 - `device-mode` `advanced` for the automatic failover **scheduler**.
 
-Quick start (Cloudflare Family):
+Quick start (standard Cloudflare, no filtering — the default since 0.2.0):
 
 ```rsc
 # 1. Upload certs/cloudflare-doh-ca.crt to the router, then:
@@ -140,8 +142,11 @@ values in [`routeros/config.example.rsc`](routeros/config.example.rsc).
 
 ```rsc
 /ip dns cache flush
-:put [:resolve example.com]     # real IP
-:put [:resolve pornhub.com]     # 0.0.0.0 with the Family filter
+:put [:resolve example.com]     # expect 104.20.x / 172.66.x
+                                # 8.6.112.0 / 8.47.69.0 is the "stub pair", not an outage:
+                                # see docs/troubleshooting.md §6.10
+:put [:resolve pornhub.com]     # a real IP with the standard resolver;
+                                # 0.0.0.0 only with Family/Security
 /log print where message~"connection error"
 ```
 
@@ -149,9 +154,10 @@ values in [`routeros/config.example.rsc`](routeros/config.example.rsc).
 
 | Situation | Behaviour |
 |---|---|
-| DoH unreachable | failover script switches to plain family DNS (logged `error`) |
-| DoH recovers | script restores DoH (logged `warning`) |
-| Both DoH and plain down | script keeps the last config and logs `critical` |
+| DoH unreachable | monitor switches to the fallback DoH, verifies it, rolls back if it fails (logged `error`/`warning`) |
+| DoH recovers | monitor returns to the primary (logged `warning`) |
+| Both endpoints down | monitor keeps the current configuration and logs `error` once |
+| Answers are the stub pair | monitor logs it once and does **not** fail over — a second endpoint returns the same pair (§6.10) |
 | Client uses its own DoH/DoT | **not blocked** (documented limit) |
 | `device-mode=home` | scheduler is rejected; run the monitor by hand |
 

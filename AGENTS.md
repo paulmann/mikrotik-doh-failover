@@ -1,12 +1,11 @@
-# AGENTS.md — mikrotik-doh-failover 0.1.0
+# AGENTS.md — mikrotik-doh-failover 0.2.0
 
 Agent-facing operational contract: how to fetch these scripts, apply them to a
 RouterOS device, verify every step, and roll back. Human documentation:
 [README.md](README.md) and [docs/](docs/); change rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Verified against repository state on 2026-10-22. Version covered: 0.1.0
-> (`CHANGELOG.md`, tag `v0.1.0` at `28cdc7a`). `main` is ahead of the tag
-> (`CHANGELOG.md` `[Unreleased]`), so pin raw URLs to the tag or a commit.
+> Verified against repository state on 2026-10-26. Version covered: 0.2.0
+> (`CHANGELOG.md`, tag `v0.2.0`). Pin raw URLs to the tag or a commit.
 > Every command below is quoted from `routeros/`; every "expect" line is what
 > `docs/verification.md` records from the test fleet. No router was touched while
 > writing this file — a `.rsc` change is unverified until it has been imported on
@@ -16,8 +15,9 @@ RouterOS device, verify every step, and roll back. Human documentation:
 
 Seven `.rsc` files that configure one **verified** DNS-over-HTTPS upstream on a
 MikroTik RouterOS box, force LAN clients onto that resolver, and add a health
-check that falls back to plain DNS when the encrypted path fails and returns to
-it after recovery. It is configuration, not software: nothing is installed,
+check that switches to a second DoH endpoint when the first fails, verifies the
+switch, rolls back if the fallback does not resolve, and returns to the primary
+after recovery. Plain DNS is bootstrap only — it is not a working fallback. It is configuration, not software: nothing is installed,
 nothing runs outside the router, and the only running piece is a RouterOS
 scheduler entry that executes a RouterOS script every 3 minutes.
 
@@ -25,9 +25,9 @@ scheduler entry that executes a RouterOS script every 3 minutes.
 |---|---|
 | Target platform | RouterOS **7.20+** as declared in the README; behaviour verified on **7.23.1** and **7.24.5** only |
 | `device-mode` | `advanced` for the automatic scheduler; `home` rejects it, then the monitor runs by hand |
-| Entry points | `routeros/00…05*.rsc` (apply in order), `routeros/config.example.rsc` (all tunables), `examples/cloudflare-family.rsc` (single-file worked example), `certs/cloudflare-doh-ca.crt` |
+| Entry points | `routeros/00…05*.rsc` (apply in order), `routeros/config.example.rsc` (all tunables), `examples/cloudflare-standard.rsc` (default) and `examples/cloudflare-family.rsc` (opt-in filtering), `certs/cloudflare-doh-ca.crt` |
 | Writes to | the router's own configuration: `/certificate`, `/ip dns`, `/ip dns static`, `/ip firewall nat`, `/ip firewall filter`, `/system script`, `/system scheduler`, optionally `/caps-man` and `/ip dhcp-server network`. No repository file is written by any script |
-| Network access | the configured DoH endpoint on TCP 443; IP-based NTP servers during setup. No telemetry, no callback, no repository traffic |
+| Network access | both DoH endpoints on TCP 443 (the monitor probes them every 3 minutes); IP-based NTP servers during setup. No telemetry, no callback, no repository traffic |
 | Not shipped | no installer, no package, no service, no CI, no issue templates — and the `v0.1.0` release carries **no assets** (`gh release view v0.1.0 --json assets` → `[]`) |
 
 ## 2. Preconditions

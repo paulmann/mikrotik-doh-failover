@@ -29,6 +29,12 @@ RouterOS 让局域网的 DNS 全部经过路由器，但默认情况下这一段
 
 ---
 
+> **0.2.0 (2026-10-26).** The default upstream is now the **standard** Cloudflare
+> resolver (no filtering), the failover switches between two DoH endpoints instead
+> of falling back to plain DNS, and the health check judges answers by content.
+> Commands in this translation may predate that change — the canonical, current
+> text is [README.md](README.md) and [docs/](docs/).
+
 ## 目录
 
 - [本项目的定位与理由](#本项目的定位与理由)

@@ -29,6 +29,12 @@ DNS को फ़ॉलबैक रखता है; LAN का पारंप
 
 ---
 
+> **0.2.0 (2026-10-26).** The default upstream is now the **standard** Cloudflare
+> resolver (no filtering), the failover switches between two DoH endpoints instead
+> of falling back to plain DNS, and the health check judges answers by content.
+> Commands in this translation may predate that change — the canonical, current
+> text is [README.md](README.md) and [docs/](docs/).
+
 ## विषय-सूची
 
 - [यह क्या है और क्यों](#यह-क्या-है-और-क्यों)

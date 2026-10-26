@@ -11,8 +11,14 @@ Commands to confirm each subsystem, then a test checklist for the failover.
 
 # DoH + bootstrap
 /ip dns print
-/ip dns static print where name~"family.cloudflare-dns.com"
-#   expect: servers=1.1.1.3,1.0.0.3; use-doh-server=...family...; verify-doh-cert=yes
+/ip dns static print where comment~"DoH bootstrap"
+#   expect (0.2.0 defaults): servers=1.1.1.1,1.0.0.1;
+#           use-doh-server=...cloudflare-dns.com...; verify-doh-cert=yes
+#           two pinned addresses for cloudflare-dns.com AND two for dns.google
+
+# clock (the monitor refuses to act on a wrong year)
+/system clock print
+#   expect: the current date
 
 # NTP
 /system ntp client print
@@ -22,60 +28,87 @@ Commands to confirm each subsystem, then a test checklist for the failover.
 /ip firewall nat print where comment~"force DNS"
 /ip firewall filter print where comment~"DNS"
 
-# resolver actually filters (Family)
+# answers are real, not a stub pair (see §6.10 of troubleshooting)
 /ip dns cache flush
-:put [:resolve example.com]     # real IP
-:put [:resolve pornhub.com]     # 0.0.0.0
+:put [:resolve example.com]     # 104.20.x / 172.66.x = real
+                                # 8.6.112.0 / 8.47.69.0 = stub pair
+:put [:resolve pornhub.com]     # filtering resolvers: 0.0.0.0; standard: a real IP
+
+# endpoint answers at all (does not touch /ip dns)
+/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" \
+    http-header-field="accept: application/dns-json" dst-path="doh.json" mode=https
+#   expect: code 200 and "Status":0 inside doh.json
 ```
 
 DoH errors are visible in the log:
 
 ```rsc
 /log print where message~"connection error"
+/log print where message~"DNS monitor"
 ```
 
-## Failover test checklist
+## Failover test checklist (0.2.0)
 
-Run each step and confirm the expected result. The monitor script
-`DNS_HealthMonitor_Failover` can be executed by hand with
-`/system script run DNS_HealthMonitor_Failover`.
+Run each step and confirm the expected result. The monitor can be executed by
+hand with `/system script run DNS_HealthMonitor_Failover`; reset the state
+variables first (`:global DNSMonitorState; :set DNSMonitorState ""`) if you want
+the transition logged again.
 
 | # | Scenario | Setup | Expected |
 |---|---|---|---|
-| 1 | normal | DoH configured, healthy | `:resolve example.com` returns IP; `$DNSCurrentMode` = `doh` |
-| 2 | primary DoH down | `/ip dns set use-doh-server="https://1.2.3.4/dns-query"` then run monitor | mode becomes `plain`, `use-doh-server=""`, log `error` |
-| 3 | all DoH down + plain OK | bogus DoH, plain reachable | plain works, filter still active |
-| 4 | recovery | restore real DoH, run monitor | mode back to `doh`, `use-doh-server` restored, log `warning` |
-| 5 | outbound UDP/53 blocked | block 53 upstream | monitor falls back to plain via the static bootstrap / plain servers |
-| 6 | CAPsMAN clients | rejoin a client | client gets router as DNS and resolves through the filtered resolver |
+| 1 | normal | DoH configured, answers real | `:resolve example.com` → `104.20.x`/`172.66.x`, log `answers look sane` (once) |
+| 2 | stub pair | resolver returns `8.6.112.0`/`8.47.69.0` | state `stub`, one warning, **no** failover |
+| 3 | primary DoH down | `/ip dns set use-doh-server="https://192.0.2.1/dns-query"`, flush, run monitor | log `primary DoH unreachable`, then `switched to fallback DoH … example.com -> …`, `use-doh-server` = fallback |
+| 4 | both down | as #3 but fallback also unreachable (`https://192.0.2.2/dns-query`) | log `both endpoints unreachable — keeping the current configuration`; `use-doh-server` unchanged |
+| 5 | fallback answers but does not resolve | fallback host has no trusted CA | log `fallback DoH did not resolve either — rolled back`; `use-doh-server` back to the primary |
+| 6 | recovery | restore the real primary, run monitor | log `primary DoH answers again — switched back from the fallback`, state `healthy` |
+| 7 | wrong clock | set the year back, run monitor | log `clock looks wrong … certificate validation cannot succeed`, nothing else |
+| 8 | CAPsMAN clients | rejoin a client | client gets the router as DNS and resolves through it |
 
 Restore after each destructive test:
 
 ```rsc
-/ip dns set use-doh-server="https://family.cloudflare-dns.com/dns-query" verify-doh-cert=yes
+/ip dns set use-doh-server="https://cloudflare-dns.com/dns-query" verify-doh-cert=yes
 /ip dns cache flush
+:global DNSMonitorState; :set DNSMonitorState ""
+:global DNSFailoverAttempts; :set DNSFailoverAttempts 0
 ```
 
 ## device-mode `home`
 
 On `home` devices `/tool fetch` returns `not allowed by device-mode` and
 `/system scheduler add` is rejected. Verify DoH there with `ping <domain>` and
-`/ip dns cache print` instead, and run the monitor by hand.
+`/ip dns cache print` instead, and run the monitor by hand. Note that without
+`fetch` the probe cannot run: the monitor then reports both endpoints
+unreachable and keeps the current configuration.
 
-## Verified results (2026-10-22)
+## Verified results
 
-Observed on the fleet (RouterOS 7.23.1 / 7.24.5):
+### 0.2.0 — re-verified 2026-10-26 on RouterOS 7.23.1 (hAP ax², test box)
+
+| Check | Command | Observed |
+|---|---|---|
+| script imports | `/import file-name=05-dns-health-monitor.rsc` | `Script file loaded and executed successfully`; script + scheduler created |
+| scheduler policy | `/system scheduler print detail` | `policy=read,write,policy,test` (v1 created it with the full default set) |
+| JSON probe | `/tool fetch url="…/dns-query?name=example.com&type=A" …` | `code 200`, body 251 bytes, `"Status":0` found by `:find` |
+| content check | monitor run, resolver answering | `answers look sane (N of 3)` / `answers are the stub pair …` |
+| failover | primary set to `https://192.0.2.1/dns-query` | switched to the fallback, `example.com -> 8.6.112.0`, `use-doh-server` = fallback |
+| rollback | primary and fallback both unreachable | `both endpoints unreachable — keeping the current configuration`; configuration untouched |
+| clock guard | wrong year in `/system clock` | `clock looks wrong (…)` and no further action |
+| Quad9 JSON | `curl https://dns.quad9.net/dns-query?name=example.com&type=A` | `DoH unable to decode BASE64-URL` — not probeable (§6.12) |
+
+### 0.1.0 — fleet baseline recorded 2026-10-22 (RouterOS 7.23.1 / 7.24.5)
+
+Kept for comparison; note the last row, which 0.2.0 turned into a documented
+finding rather than "normal".
 
 | Check | Command | Observed |
 |---|---|---|
 | CA import | `/certificate import file-name=cacert.pem` | 118 CAs imported; `trusted=yes` set |
 | CA required | untrust all imported CAs, `:resolve example.com` | `failure: dns server failure` — import is mandatory |
 | builtin store | `/certificate settings set builtin-trust-anchors=trusted` | `bad parameter` — the parameter is `builtin-trust-store` |
-| DoH resolve | `:resolve example.com` | real IP (`8.6.112.0` / `8.47.69.0`) |
 | family filter | `:resolve pornhub.com` | `0.0.0.0` on all five devices |
 | `:resolve server=` | `:resolve cloudflare.com server=1.1.1.3` | `104.16.132.229` (supported) |
 | `:resolve timeout=` | `:resolve cloudflare.com timeout=5s` | `bad parameter timeout` (not supported) |
-| failover down | set bogus `use-doh-server`, run monitor | mode `plain`, `use-doh-server=""` |
-| failover restore | restore DoH, run monitor | mode `doh`, `use-doh-server` restored |
 | bootstrap | `/ip dns static print where name="family.cloudflare-dns.com"` | `1.1.1.3` / `1.0.0.3` |
-
+| DoH resolve | `:resolve example.com` | `8.6.112.0` / `8.47.69.0` — recorded as "real IP" in 0.1.0; it is the stub pair, see troubleshooting §6.10 |

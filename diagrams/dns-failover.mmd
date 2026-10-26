@@ -1,14 +1,20 @@
 flowchart TD
-    Start["monitor runs (3m)"] --> ReadMode["read DNSCurrentMode"]
-    ReadMode --> IsDoh{"mode == doh?"}
-    IsDoh -->|"yes"| TestDoh[":resolve testDomain"]
-    TestDoh --> DohOk{"resolved?"}
-    DohOk -->|"yes"| NoOp["nothing (stable)"]
-    DohOk -->|"no"| TestPlain[":resolve testDomain server=1.1.1.3"]
-    TestPlain --> PlainOk{"resolved?"}
-    PlainOk -->|"yes"| SwitchPlain["use-doh-server=''<br/>flush cache<br/>mode=plain<br/>log error"]
-    PlainOk -->|"no"| Critical["log critical<br/>all paths down"]
-    IsDoh -->|"no (plain)"| TryRestore["use-doh-server=DoH<br/>then :resolve testDomain"]
-    TryRestore --> RestoreOk{"resolved?"}
-    RestoreOk -->|"yes"| SwitchDoh["flush cache<br/>mode=doh<br/>log warning"]
-    RestoreOk -->|"no"| StayPlain["use-doh-server=''<br/>log info"]
+    Start["monitor runs (3m)"] --> Clock{"clock sane?"}
+    Clock -->|"no"| ClockWarn["log error<br/>cert validation impossible<br/>stop"]
+    Clock -->|"yes"| Answers["resolve 3 canaries<br/>judge CONTENT, not type"]
+    Answers --> Good{"any real address?"}
+    Good -->|"yes"| Home{"state == failoverB?"}
+    Home -->|"yes"| Back["switch back to DoH A<br/>reset attempts<br/>log warning"]
+    Home -->|"no"| Healthy["state=healthy<br/>log on transition"]
+    Good -->|"no"| Stub{"answers are<br/>8.6.112.x / 8.47.69.x?"}
+    Stub -->|"yes"| StubState["state=stub<br/>log warning once<br/>second endpoint returns same pair<br/>no failover"]
+    Stub -->|"no"| ProbeA["probe endpoint A<br/>/tool fetch + JSON"]
+    ProbeA --> AliveA{"A answers?"}
+    AliveA -->|"yes"| Flush["flush cache<br/>state=dead<br/>re-check next run"]
+    AliveA -->|"no"| ProbeB["probe endpoint B"]
+    ProbeB --> AliveB{"B answers?"}
+    AliveB -->|"no"| Keep["state=dead<br/>both unreachable<br/>keep current config"]
+    AliveB -->|"yes"| Switch["switch use-doh-server to B<br/>flush cache<br/>wait 3s"]
+    Switch --> Verify{":resolve works?"}
+    Verify -->|"yes"| Failover["state=failoverB<br/>log warning<br/>attempts+1"]
+    Verify -->|"no"| Rollback["roll back to A<br/>state=dead<br/>log error: check CA for B"]
