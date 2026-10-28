@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---|---|
-| `main` (0.3.1, unreleased) | yes — explicit state machine, hysteresis thresholds, concurrency guard, endpoint-driven failover |
+| v0.3.1 (tagged, 2026-10-28) | yes — explicit state machine, hysteresis thresholds, concurrency guard, endpoint-driven failover |
 | v0.2.0 (tag `v0.2.0`, 2026-10-26) | yes — last tagged release |
 | v0.1.0 | no — the health check there accepted the stub pair `8.6.112.0`/`8.47.69.0` as a healthy answer and fell back to plain DNS |
 

@@ -52,7 +52,7 @@ _No unreleased changes._
   pinned ref moved from `v0.1.0` to `v0.2.0`.
 - Wiki pages updated for 0.2.0: failover is DoH to DoH, the health check judges
   answer content, and the Zabbix fleet monitoring has its own page.
-- `SECURITY.md`: supported version is 0.3.1 (on `main`), last tag `v0.2.0`.
+- `SECURITY.md`: supported version is v0.3.1 (tagged 2026-10-28).
 
 ### Fixed
 - `routeros/05-dns-health-monitor.rsc` — **recovery flapping**: the monitor used
