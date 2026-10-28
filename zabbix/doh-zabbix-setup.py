@@ -11,13 +11,28 @@
 from __future__ import annotations
 
 import json
+import os
 import ssl
 import sys
 import urllib.request
 
+
+def _credential(name: str) -> str:
+    """Read an API credential from the environment; never from this file.
+
+    The repository is public: a literal here is a leaked credential. The value
+    is supplied by the caller (export ZBX_USER / ZBX_PASSWORD, or a systemd
+    EnvironmentFile on the host that runs the collector).
+    """
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"{name} is not set: export it before running this script")
+    return value
+
+
 API = "https://22877.ru/api_jsonrpc.php"
-USER = "md"
-PASSWORD = "Glevitumi5"
+USER = _credential("ZBX_USER")
+PASSWORD = _credential("ZBX_PASSWORD")
 
 GROUP = "MikroTik DoH"
 DOH_ROOT = "DoH на микротиках"

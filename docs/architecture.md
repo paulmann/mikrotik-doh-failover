@@ -131,7 +131,7 @@ Two independent measurements per run:
 | `stub` | answers are the stub pair | nothing — a second endpoint returns the same pair | `warning` once |
 | `dead` | no usable answers, endpoint answering | flush cache, re-check next run | `warning` once |
 | `failoverB` | primary unreachable, fallback probed OK, switch verified | stay on fallback; try to come home each run | `warning` once |
-| `dead` (both) | neither endpoint reachable | keep the current configuration | `error` once |
+| `dead` (both) | neither endpoint reachable | keep the current configuration; stop after `maxAttempts` | `error` once |
 
 A failover is attempted at most `maxAttempts` (3) times per outage; the fallback
 is probed **before** switching and the switch is verified **after**, with an

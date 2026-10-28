@@ -4,8 +4,8 @@
 
 | Version | Supported |
 |---|---|
-| v0.1.0 (latest) | yes |
-| earlier | best effort |
+| v0.2.0 (latest, tag `v0.2.0`, 2026-10-26) | yes |
+| v0.1.0 | no — the health check there accepted the stub pair `8.6.112.0`/`8.47.69.0` as a healthy answer and fell back to plain DNS |
 
 ## Reporting a vulnerability
 
@@ -32,6 +32,8 @@ passwords) and customer data.
 
 - The scripts import a CA **explicitly**; they never use `check-certificate=no`
   in a persistent configuration (bootstrap-only at most).
+- Since 0.2.0 the failover never falls back to plain DNS: measured substitution
+  on the path makes a plain fallback a silent outage. Both endpoints are DoH.
 - Script policies are narrowed to `read,write,policy,test`; the failover script
   does not carry `ftp`, `reboot`, `password`, `sniff`, `sensitive` or `romon`.
 - The resolver drops DNS from WAN and only redirects classic DNS (53). Client

@@ -1,7 +1,8 @@
 # Troubleshooting
 
 Field notes from deploying this on a fleet of RouterOS 7.23.1 / 7.24.5 devices
-(Chateau PRO ax, RB4011iGS+, hAP ax², RB951Ui, cAP ax), ordered by frequency.
+(Chateau PRO ax, RB4011iGS+, hAP ax², RB951Ui, cAP ax, RB2011UiAS), ordered by
+frequency.
 
 | Problem | Symptom | Fix |
 |---|---|---|

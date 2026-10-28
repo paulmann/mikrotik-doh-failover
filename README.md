@@ -23,15 +23,19 @@ and adds a scheduled health-check that switches endpoints on failure. It is the
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 on `sysadministrator.ru`.
 
-> **Documentation status.** Counts in this README were measured from the
-> published tree on 2026-10-22 (v0.1.0). Long-form design rationale is in
-> [`docs/`](docs/); the scripts were verified on RouterOS 7.23.1 and 7.24.5.
+> **Documentation status.** Version covered: **0.2.0** (tag `v0.2.0`,
+> 2026-10-26). Counts in "By the numbers" were measured with `git ls-files` and
+> `Get-ChildItem` on `main` on 2026-10-26, after the 0.2.0 documentation pass.
+> Behaviour was verified on RouterOS 7.23.1 and 7.24.5; anything not verified on
+> a device is marked as such in the text, and `device-mode` is named wherever it
+> changes the outcome.
 
 ---
 
 ## Contents
 
 - [What this is and why](#what-this-is-and-why)
+- [What changed in 0.2.0](#what-changed-in-020)
 - [Capabilities](#capabilities)
 - [By the numbers](#by-the-numbers)
 - [How it works](#how-it-works)
@@ -65,8 +69,29 @@ This project avoids both:
 - **bootstrap static A records for both endpoint hosts**, so the health probe
   can reach them even when the resolver itself is dead.
 
-Every claim in this README and in `docs/` was verified on real devices; the
-version and `device-mode` are stated where behaviour differs.
+## What changed in 0.2.0
+
+Version 0.1.0 was wrong in a way that mattered in the field: it called the
+resolver healthy when the answer was the pair `8.6.112.0` / `8.47.69.0`, which
+several networks cannot reach — pages stopped opening while the monitor reported
+"fine". 0.2.0 changes five things (full text:
+[`docs/release-notes-v0.2.0.md`](docs/release-notes-v0.2.0.md)):
+
+| Change | Before (0.1.0) | Now (0.2.0) |
+|---|---|---|
+| Default upstream | Cloudflare Family (`family.cloudflare-dns.com`, filtering) | Cloudflare **standard** (`cloudflare-dns.com`, 1.1.1.1/1.0.0.1); filtering is an opt-in |
+| Failover target | plain DNS fallback | a second **DoH** endpoint (`dns.google`) |
+| Health check | any valid IP counted as healthy | answer **content** judged via three canaries |
+| Endpoint probe | flipped `use-doh-server` (LAN lost DoH on every check) | `/tool fetch` against the DNS-JSON API, `/ip dns` untouched |
+| Failed failover | router left on a dead endpoint | probed before, verified after, rolled back on failure |
+
+Upgrading from 0.1.0 needs two steps beyond copying the scripts: clear the old
+state globals (`DNSMonitorState`, `DNSFailoverAttempts`), and decide explicitly
+whether you want filtering back — that means the Family URL, the matching
+`servers` and the CA from `examples/cloudflare-family.rsc`. The `filtering` flag
+in `05-dns-health-monitor.rsc` is a marker for the reader only: the script
+declares it and never reads it, so nothing in the log depends on it (measured
+2026-10-26). The 0.1.0 global `DNSCurrentMode` no longer exists.
 
 ## Capabilities
 
@@ -80,19 +105,27 @@ version and `device-mode` are stated where behaviour differs.
 | Force classic DNS | `dstnat redirect` of UDP/TCP 53 from the LAN bridge |
 | Resolver protection | drop DNS from WAN, accept from LAN (UDP and TCP) |
 | Failover policy | `read,write,policy,test` only (no `ftp`/`reboot`/`password`) |
+| Fleet monitoring | Zabbix 8 collector for DoH and VPN state over SSH — `zabbix/`, on `main` after the `v0.2.0` tag |
 
 ## By the numbers
 
-Measured from the published tree on 2026-10-22 (v0.1.0):
+Measured on `main`, 2026-10-26:
 
 | Surface | Count | Measured from |
 |---|---|---|
-| RouterOS scripts | 7 | `routeros/` |
-| Example configs | 1 | `examples/` |
-| Docs | 3 | `docs/` |
-| Diagrams | 3 | `diagrams/` |
-| Devices tested | 5 | `docs/verification.md` |
+| RouterOS scripts | 7 (360 lines) | `routeros/*.rsc` |
+| Example configs | 2 | `examples/*.rsc` |
+| Docs | 5 | `docs/*.md` |
+| Diagrams | 3 | `diagrams/*.mmd` |
+| README languages | 6 | `README*.md` |
+| Files tracked by git | 38 | `git ls-files` |
+| Devices tested | 6 | `docs/verification.md`, table below |
 | RouterOS versions tested | 2 (7.23.1, 7.24.5) | `docs/verification.md` |
+| Zabbix objects | 8 items, 5 triggers, 2 service trees | `zabbix/doh-zabbix-setup.py` |
+
+The `v0.2.0` tag itself contains 32 files; everything under `zabbix/` was
+committed after the tag and is therefore unreleased on `main` until the next
+version.
 
 ## How it works
 
@@ -101,27 +134,36 @@ flowchart LR
     Client["LAN client"] -->|"DNS 53"| ForceDNS["force-DNS redirect"]
     ForceDNS --> Resolver["Router resolver"]
     Resolver --> Mode{"DoH healthy?"}
-    Mode -->|"yes"| DoH["DoH upstream<br/>verify-doh-cert=yes"]
-    Mode -->|"no"| Plain["second DoH endpoint"]
-    Monitor["health monitor 3m"] -->|"flips use-doh-server"| Resolver
+    Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
+    Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
+    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor -->|"/tool fetch probe"| DoH
+    Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
+    CA -->|"TLS validation"| DoHB
     NTP["NTP"] -->|"clock"| CA
 ```
+
+The monitor never toggles `use-doh-server` to test an endpoint: the probe is an
+HTTPS request from `/tool fetch`, so a routine check leaves `/ip dns` alone. The
+state machine (diagram: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd))
+is `healthy` → `stub` → `dead` → `failoverB`, logged on transitions only.
 
 | Component | Responsibility |
 |---|---|
 | `00-install-ca.rsc` | trust anchor for `verify-doh-cert=yes` |
-| `01-configure-doh.rsc` | one DoH upstream + bootstrap + fallback |
+| `01-configure-doh.rsc` | one DoH upstream + bootstrap for both endpoint hosts |
 | `02-security-policies.rsc` | force classic DNS + resolver protection |
 | `03-capsman.rsc` | targeted CAPsMAN/DHCP integration |
 | `04-cert-update.rsc` | optional CA refresh |
-| `05-dns-health-monitor.rsc` | health check + failover scheduler |
+| `05-dns-health-monitor.rsc` | content check + DoH-to-DoH failover (`maxAttempts=3`) |
 
 ## Installation
 
 Requirements:
 
-- RouterOS **7.20+** (verified 7.23.1, 7.24.5);
+- RouterOS **7.20+** as declared; behaviour verified only on **7.23.1** and
+  **7.24.5**;
 - NTP synchronized;
 - `device-mode` `advanced` for the automatic failover **scheduler**.
 
@@ -136,7 +178,8 @@ Quick start (standard Cloudflare, no filtering — the default since 0.2.0):
 ```
 
 For other providers (Quad9, Google, Cloudflare standard/security) edit the
-values in [`routeros/config.example.rsc`](routeros/config.example.rsc).
+values in [`routeros/config.example.rsc`](routeros/config.example.rsc). Pinning
+raw URLs to `v0.2.0` (or a commit) is safer than `main`; `main` is ahead of the tag.
 
 ## First steps
 
@@ -158,8 +201,10 @@ values in [`routeros/config.example.rsc`](routeros/config.example.rsc).
 | DoH recovers | monitor returns to the primary (logged `warning`) |
 | Both endpoints down | monitor keeps the current configuration and logs `error` once |
 | Answers are the stub pair | monitor logs it once and does **not** fail over — a second endpoint returns the same pair (§6.10) |
+| Clock is wrong | monitor logs `clock looks wrong …` and stops, because certificate validation cannot succeed on a wrong date |
+| Failover keeps failing | at most 3 attempts per outage, then the monitor waits for the primary to recover instead of filling the log |
 | Client uses its own DoH/DoT | **not blocked** (documented limit) |
-| `device-mode=home` | scheduler is rejected; run the monitor by hand |
+| `device-mode=home` | `fetch` and the scheduler are rejected; run the monitor by hand |
 
 ### Scheduler rejected: `not allowed by device-mode`
 
@@ -167,7 +212,8 @@ On devices with `device-mode=home` (for example the RB4011iGS+ tested here),
 RouterOS rejects `/system scheduler add` and `/tool fetch` with
 `not allowed by device-mode`. This is an expected RouterOS limit, not a script
 defect: the DoH config and force-DNS still work, but the failover monitor can
-only be run manually. Options:
+only be run manually, and without `fetch` it cannot probe endpoints at all — it
+then keeps the current configuration.
 
 1. leave `home` and run `/system script run DNS_HealthMonitor_Failover` by hand;
 2. switch to `advanced` to enable the scheduler:
@@ -183,6 +229,8 @@ only be run manually. Options:
 - Choosing Cloudflare/Quad9/Google means trusting that third party with your
   queries; DoH hides them from the local link only.
 - CA bootstrap must use a trusted source; `check-certificate=no` is bootstrap-only.
+- The failover target must be a DoH endpoint that answers the DNS-JSON API — a
+  Quad9 fallback would always look unreachable (`docs/troubleshooting.md` §6.12).
 - See [SECURITY.md](SECURITY.md) for reporting and the security model.
 
 ## Requirements and compatibility
@@ -200,11 +248,13 @@ only be run manually. Options:
 
 | Document | Contents |
 |---|---|
-| [`docs/architecture.md`](docs/architecture.md) | design rationale and threat model |
-| [`docs/verification.md`](docs/verification.md) | per-subsystem checks + failover test checklist |
-| [`docs/troubleshooting.md`](docs/troubleshooting.md) | known failures and workarounds |
+| [`docs/architecture.md`](docs/architecture.md) | design rationale, state table, threat model |
+| [`docs/verification.md`](docs/verification.md) | per-subsystem checks + eight failover scenarios |
+| [`docs/troubleshooting.md`](docs/troubleshooting.md) | known failures and workarounds, including §6.10 (stub pair) |
+| [`docs/release-notes-v0.2.0.md`](docs/release-notes-v0.2.0.md) | what 0.2.0 changed and the measurements behind it |
 | [`zabbix/README.md`](zabbix/README.md) | fleet monitoring in Zabbix: DoH and VPN state, triggers, service tree |
 | [`routeros/config.example.rsc`](routeros/config.example.rsc) | all tunable values |
+| [`AGENTS.md`](AGENTS.md) | the same contract written for a machine caller |
 
 ## Contributing
 

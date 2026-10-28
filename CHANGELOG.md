@@ -1,16 +1,41 @@
 # Changelog
 
-All notable changes to this project are documented here. The project follows
-[Semantic Versioning](https://semver.org/).
+All notable changes to this project are documented here. The format follows
+[Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/) and the project
+uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
 ### Added
 - `zabbix/` — fleet monitoring for Zabbix 8: a collector that reads DoH state
   (`/ip dns use-doh-server`, three canaries) and VPN state (WireGuard peers,
-  handshake age) from every router over SSH and pushes it as trapper items;
-  six triggers and two service trees (`DoH на микротиках`, `VPN -> Микротики`).
+  handshake age) from six routers over SSH and pushes it to trapper items;
+  eight items, five triggers, two service trees (`DoH на микротиках`,
+  `VPN -> Микротики`). Added on `main` after the `v0.2.0` tag.
 - `zabbix/systemd/` — timer and service units (run every 2 minutes).
+- `zabbix/README.md` (English) and `zabbix/README.ru.md` (Russian original),
+  matching the repository's `*.ru.md` convention for translated copies.
+
+### Changed
+- Documentation brought up to the 0.2.0 code: the five translated READMEs
+  (`README.ru.md`, `README.de.md`, `README.zh.md`, `README.hi.md`,
+  `README.es.md`) were written before the 0.2.0 changes landed and still
+  described the Family default and a plain-DNS fallback; they are rewritten
+  against the same facts as `README.md`.
+- `AGENTS.md` rewritten for 0.2.0: the verification table no longer expects
+  `$DNSCurrentMode` (the global does not exist any more), the state-test
+  described as `[:typeof $ip] = "ip"` is replaced by the content check, and the
+  pinned ref moved from `v0.1.0` to `v0.2.0`.
+- Wiki pages updated for 0.2.0: failover is DoH to DoH, the health check judges
+  answer content, and the Zabbix fleet monitoring has its own page.
+- `SECURITY.md`: supported version is 0.2.0.
+
+### Fixed
+- `CHANGELOG.md`: the 0.2.0 section claimed six Zabbix triggers; the setup script
+  creates five (`TRIGGERS` in `zabbix/doh-zabbix-setup.py`). The `AGENTS.md` and
+  social-preview entries of v0.1.0 that had drifted under the 0.2.0 heading are
+  back in their own release.
+
 ## [v0.2.0] - 2026-10-26
 
 Default upstream changed to the standard (non-filtering) resolver; failover now
@@ -25,8 +50,8 @@ health check judges answers by content.
   from a client, and the three fixes that actually work.
 - `docs/troubleshooting.md` §6.11 (probe needs its own DNS), §6.12 (Quad9 does
   not speak the DNS-JSON API).
-- `docs/verification.md` — 0.2.0 checklist (failover, rollback, stub pair, clock
-  guard) and the re-verified results on RouterOS 7.23.1.
+- `docs/verification.md` — 0.2.0 checklist (eight scenarios: failover, rollback,
+  stub pair, clock guard) and the re-verified results on RouterOS 7.23.1.
 - `docs/release-notes-v0.2.0.md`.
 - `routeros/05-dns-health-monitor.rsc` — content-aware check, `/tool fetch`
   probe of both endpoints, clock guard, DoH-to-DoH failover with verification and
@@ -55,13 +80,6 @@ health check judges answers by content.
 - Plain DNS is no longer treated as a working fallback: measured substitution on
   the path, even for queries straight to 1.1.1.1/8.8.8.8.
 
-
-### Added
-- `AGENTS.md` — agent-facing operational contract: fetch, apply, verify and roll back
-  on RouterOS, with the measured expected outputs and the deliberate limits.
-- `assets/social-preview.png` (1280x640) — README header banner and repository
-  social preview, and the banner is now embedded in `README.md` under the badges.
-
 ## [v0.1.0] - 2026-10-22
 
 Initial tested release.
@@ -77,6 +95,10 @@ Initial tested release.
 - `docs/architecture.md`, `docs/verification.md`, `docs/troubleshooting.md`.
 - Mermaid diagrams under `diagrams/`.
 - `certs/cloudflare-doh-ca.crt` (SSL.com TLS ECC Root CA 2022).
+- `AGENTS.md` — agent-facing operational contract: fetch, apply, verify and roll back
+  on RouterOS, with the measured expected outputs and the deliberate limits.
+- `assets/social-preview.png` (1280x640) — README header banner and repository
+  social preview, and the banner is now embedded in `README.md` under the badges.
 
 ### Fixed / Corrected
 - Removed the invalid `static-server type=doh` "backup DoH" mechanism; replaced
@@ -98,3 +120,7 @@ Initial tested release.
   devices the monitor runs manually only.
 - Client DoH/DoT is not blocked; classic DNS (53) is redirected, DoT (853) has
   an optional block rule.
+
+[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.2.0...HEAD
+[v0.2.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.1.0...v0.2.0
+[v0.1.0]: https://github.com/paulmann/mikrotik-doh-failover/releases/tag/v0.1.0
