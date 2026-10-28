@@ -1,11 +1,11 @@
-# AGENTS.md — mikrotik-doh-failover 0.3.1
+# AGENTS.md — mikrotik-doh-failover 0.4.0
 
 Agent-facing operational contract: how to fetch these scripts, apply them to a
 RouterOS device, verify every step, and roll back. Human documentation:
 [README.md](README.md) and [docs/](docs/); change rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Verified against repository state on 2026-10-28, tagged `v0.3.1`
-> (commit `5a07851`). Pin raw URLs to a
+> Verified against repository state on 2026-10-28, commit `17ab6bb`, on `main`
+> (0.4.0, unreleased). Pin raw URLs to a commit — `main` is ahead of the tag. Pin raw URLs to a
 > commit — `main` is ahead of the tag.
 > Every command below is quoted from `routeros/`; every "expect" line is what
 > `docs/verification.md` records from the test fleet. No router was touched while
@@ -140,18 +140,20 @@ Run these after §4. The expected values are the ones recorded in
 | Resolver protection | `/ip firewall filter print where comment~"DNS"` | accept UDP+TCP from LAN, drop UDP+TCP from WAN |
 | Real resolution | `/ip dns cache flush` then `:put [:resolve example.com]` | `104.20.x` / `172.66.x`; **not** `8.6.112.0` / `8.47.69.0` |
 | Content judged | resolve all three canaries | at least one real address; the stub pair counts as unusable |
-| Mode | `:put $DNSMonitorState` | `healthy` after a clean run; the other states are `suspect`, `stub`, `fallback`, `recovering`, `degraded`, `clock-invalid`, `manual-only` (see §5.1) |
+| Mode | `:put $DNSMonitorState` | `healthy` after a clean run; the other states are `suspect`, `stub`, `fallback`, `recovering`, `plain`, `degraded`, `clock-invalid`, `manual-only` (see §5.1) |
 | Attempts | `:put $DNSFailoverAttempts` | `0` while the primary answers |
-| Endpoint probe | `/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" http-header-field="accept: application/dns-json" dst-path="doh.json" mode=https` | HTTP 200 and `"Status":0` inside `doh.json` |
+| Endpoint probe | `:local r [/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" http-header-field="accept: application/dns-json" mode=https as-value output=user]; :put ($r->"status"); :put ([:find ($r->"data") "\"Status\":0"])` | `finished` and a non-negative `:find` position (no temp file) |
 | Errors | `/log print where message~"connection error"` | nothing, on a healthy setup |
 
-**How the monitor judges an answer (0.3.1).** Three canaries —
+**How the monitor judges an answer (0.4.0).** Three canaries —
 `example.com`, `cdnjs.cloudflare.com`, `cdn.tailwindcss.com` — are resolved
 through the live resolver and the *content* is checked: empty, `0.0.0.0`, or a
 prefix from `8.6.112.` / `8.47.69.` counts as unusable. A failover is triggered
 by **endpoint health** (`probeA` unreachable) OR by no usable answers, after
 `failureThreshold` consecutive runs; recovery needs `recoveryThreshold`
-consecutive good runs and the primary endpoint to answer. State lives in
+consecutive good runs and the primary endpoint to answer. Since 0.4.0 the ordering
+is primary → secondary → tertiary (`dohUrlC`, optional) → plain DNS
+(`plainFallback`, optional, logged `PRIVACY DEGRADED`). State lives in
 `DNSMonitorState`, `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` and
 `DNSMonitorRunning`.
 
@@ -177,20 +179,22 @@ Measured oddities worth knowing before you "fix" a script:
 ```text
 HEALTHY --canary fails / endpoint down--> SUSPECT
 SUSPECT --canary passes / endpoint up--> HEALTHY
-SUSPECT --failureThreshold bad runs--> FALLBACK   (fallback probed before, verified after)
+SUSPECT --failureThreshold bad runs--> FALLBACK   (secondary probed first, tertiary if configured)
 FALLBACK --primary passes once--> RECOVERING
 RECOVERING --recoveryThreshold good runs--> HEALTHY
 RECOVERING --primary fails again--> FALLBACK
-SUSPECT / FALLBACK --both endpoints unreachable--> DEGRADED
+SUSPECT / FALLBACK --secondary and tertiary unreachable, plainFallback=true--> PLAIN
+PLAIN --primary passes--> RECOVERING
+SUSPECT / FALLBACK / PLAIN --nothing left and no plain--> DEGRADED
 any --answers are the stub pair--> STUB          (not a failover-able fault)
 any --device-mode=home--> MANUAL-ONLY
 ```
 
 Transitions are logged with an UPPERCASE tag (`HEALTHY`, `SUSPECT`, `FALLBACK`,
-`RECOVERING`, `STUB`, `DEGRADED`, `CLOCK_INVALID`, `MONITOR_DISABLED_BY_DEVICE_MODE`).
-`failureThreshold` and `recoveryThreshold` (both 2) are the anti-flap hysteresis;
-`monitorInterval` (60 s default) is the scheduler period. The monitor refuses to
-act on a clock date outside `2025..2035`.
+`RECOVERING`, `PLAIN`, `STUB`, `DEGRADED`, `CLOCK_INVALID`,
+`MONITOR_DISABLED_BY_DEVICE_MODE`). `failureThreshold` and `recoveryThreshold`
+(both 2) are the anti-flap hysteresis; `monitorInterval` (60 s default) is the
+scheduler period. The monitor refuses to act on a clock date outside `2025..2035`.
 
 ## 6. Configure
 
@@ -224,7 +228,7 @@ it and never reads it, so no behaviour and no log line depends on it.
 | One device at a time, verify before the next | a broken step 2 on ten routers is ten networks without DNS |
 | Read an empty result correctly | `use-doh-server=""` means "plain mode", not "broken"; an empty `/log print where comment~"connection error"` is the healthy state; a failed `:resolve` is a `failure:` string, not an empty value |
 | Guard state reads in scripts | the monitor wraps `:resolve` in `:do {} on-error={}` so a failed lookup does not abort the run — do the same in anything you add |
-| Know where the state lives | five globals: `DNSMonitorState` (`healthy`/`suspect`/`stub`/`fallback`/`recovering`/`degraded`/`clock-invalid`/`manual-only`), `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` (reset to `0` whenever the primary answers) and `DNSMonitorRunning` (the concurrency guard). They live in memory: a reboot clears them, and the monitor then logs its first transition again |
+| Know where the state lives | five globals: `DNSMonitorState` (`healthy`/`suspect`/`stub`/`fallback`/`recovering`/`plain`/`degraded`/`clock-invalid`/`manual-only`), `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` (reset to `0` whenever the primary answers) and `DNSMonitorRunning` (the concurrency guard). They live in memory: a reboot clears them, and the monitor then logs its first transition again |
 
 Minimal non-interactive pipeline on a device that already has the files:
 

@@ -28,6 +28,15 @@
 :global dohUrlB    "https://dns.google/dns-query"                 # fallback
 :global probeUrlA  "https://cloudflare-dns.com/dns-query?name=example.com&type=A"
 :global probeUrlB  "https://dns.google/resolve?name=example.com&type=A"
+# Optional tertiary DoH endpoint (0.4.0). Leave BOTH empty to disable it. The probe
+# must speak DNS-JSON (Cloudflare/Google); Quad9 does not.
+:global dohUrlC    ""                                             # e.g. "https://security.cloudflare-dns.com/dns-query"
+:global probeUrlC  ""
+# Optional last-resort plain DNS (0.4.0), OFF by default. When enabled and every
+# DoH endpoint is unreachable, the monitor clears use-doh-server, sets these plain
+# resolvers and logs "PRIVACY DEGRADED". This is a deliberate privacy downgrade.
+:global plainFallback false
+:global plainServers  "1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4"
 # The fallback needs its own root CA in the trust store, otherwise verify-doh-cert=yes
 # rejects it and the monitor rolls back (and says so in the log).
 # Quad9 cannot be used as the fallback with the JSON probe (its dns-query does not

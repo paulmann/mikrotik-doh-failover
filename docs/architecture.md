@@ -124,8 +124,11 @@ Two independent measurements per run:
    pair `8.6.112.0`/`8.47.69.0` all count as unusable. v1 judged only the type
    (`ip`), which is why it called the stub pair healthy.
 2. **Does each endpoint answer?** The primary (and, before a switch, the
-   fallback) is probed with `/tool fetch` against its DNS-JSON API. This does not
-   touch `/ip dns`, so a routine check never takes the LAN off DoH.
+   secondary and — if configured — the tertiary) is probed with `/tool fetch ...
+   as-value output=user` against its DNS-JSON API. Since 0.4.0 the response body
+   arrives in memory, so the probe creates no temporary files in `/file` and
+   cannot leave stale ones behind. This does not touch `/ip dns`, so a routine
+   check never takes the LAN off DoH.
 
 ### State machine
 
@@ -134,11 +137,13 @@ CLOCK_INVALID   (wrong date — certificate validation cannot succeed)
 
 HEALTHY --canary fails--> SUSPECT
 SUSPECT --canary passes--> HEALTHY
-SUSPECT --failureThreshold bad runs--> FALLBACK   (fallback probed before, verified after)
+SUSPECT --failureThreshold bad runs--> FALLBACK   (secondary probed first, tertiary if configured)
 FALLBACK --primary passes--> RECOVERING
 RECOVERING --recoveryThreshold good runs--> HEALTHY
 RECOVERING --primary fails again--> FALLBACK
-SUSPECT / FALLBACK --both endpoints unreachable--> DEGRADED
+SUSPECT / FALLBACK --secondary and tertiary unreachable, plainFallback=true--> PLAIN
+PLAIN --primary passes--> RECOVERING
+SUSPECT / FALLBACK / PLAIN --nothing left and no plain--> DEGRADED
 any --answers are the stub pair--> STUB          (not a failover-able fault)
 any --device-mode=home--> MANUAL-ONLY
 ```
@@ -148,9 +153,10 @@ any --device-mode=home--> MANUAL-ONLY
 | `healthy` | at least one canary returns a real address | primary active; reset counters |
 | `suspect` | a bad run seen, below `failureThreshold` | keep the primary, keep counting |
 | `stub` | answers are the stub pair | nothing — a second endpoint returns the same pair (§6.10) |
-| `fallback` | primary failed `failureThreshold` runs, fallback verified | on the fallback endpoint |
+| `fallback` | primary failed `failureThreshold` runs, secondary (or tertiary) verified | on the fallback endpoint |
 | `recovering` | primary answers again, below `recoveryThreshold` | still on the fallback, counting up |
-| `degraded` | both endpoints unreachable | keep the current configuration |
+| `plain` | all DoH endpoints failed and `plainFallback=true` | on plain DNS — logged `PRIVACY DEGRADED` |
+| `degraded` | all endpoints unreachable, no plain fallback | keep the current configuration |
 | `clock-invalid` | clock date wrong | stop — `verify-doh-cert` cannot succeed |
 | `manual-only` | `device-mode=home` | no `fetch`/scheduler — run by hand, no failover |
 
@@ -185,6 +191,16 @@ monitor permanently locked.
 **Clock range (0.3.1).** The monitor refuses to act on a date outside `2025..2035`
 — a future date passes a "year < 2025" check but still breaks `verify-doh-cert`
 (the certificate is not valid yet).
+
+**Probe and chain (0.4.0).** The endpoint probe returns the JSON body in memory
+(`/tool fetch ... as-value output=user`), so there are no temporary files and no
+cleanup races, and the JSON check accepts both `"Status":0` and `"Status": 0`.
+The failover is an ordered chain: primary → secondary → tertiary (`dohUrlC`,
+optional — leave empty to disable) → plain DNS (`plainFallback`, optional). The
+plain step is off by default and, when enabled, is an explicit privacy downgrade
+logged as `PRIVACY DEGRADED`. Only the DNS-JSON providers can be probed
+(Cloudflare and Google); Quad9 answers `DoH unable to decode BASE64-URL` to the
+JSON GET and therefore cannot be a chained endpoint while the JSON probe is used.
 
 ## 4. Threat model
 

@@ -24,7 +24,7 @@ reproducir y mantener» del artículo
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 en `sysadministrator.ru`.
 
-> **Estado de la documentación.** Versión cubierta: **0.2.0** (etiqueta `v0.2.0`,
+> **Estado de la documentación.** Versión cubierta: **0.4.0** (en `main`, última etiqueta `v0.3.1`),
 > 2026-10-26). Los recuentos de «En cifras» se midieron con `git ls-files` y
 > `Get-ChildItem` sobre `main` el 2026-10-26, tras la pasada de documentación
 > de 0.2.0. El
@@ -71,6 +71,12 @@ Este proyecto evita ambas cosas:
   integrado no cubre la cadena de Cloudflare en 7.23/7.24;
 - **registros A estáticos de bootstrap para los dos hosts de endpoint**, para que
   la sonda de salud pueda alcanzarlos incluso cuando el resolver está muerto.
+
+## Qué cambió en 0.4.0
+
+- La prueba del endpoint se ejecuta en memoria: `/tool fetch ... as-value output=user`, sin archivos temporales en `/file` ni carreras de limpieza. La comprobación JSON acepta `"Status":0` y `"Status": 0`.
+- El failover es una cadena ordenada: primary → secondary → tertiary (`dohUrlC`, opcional) → plain DNS (`plainFallback`, desactivado por defecto).
+- Nuevo estado `plain` (último recurso plain DNS), log `PRIVACY DEGRADED` y vuelta al primary.
 
 ## Qué cambió en 0.2.0
 
@@ -152,7 +158,7 @@ El monitor nunca conmuta `use-doh-server` para probar un endpoint: la sonda es
 una petición HTTPS desde `/tool fetch`, así que una comprobación rutinaria deja
 `/ip dns` en paz. La máquina de estados (diagrama:
 [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) es
-`healthy` → `suspect` → `fallback` → `recovering` → `healthy`, y se registra solo en las transiciones.
+`healthy` → `suspect` → `fallback` → `recovering` → `healthy`; además `stub`, `plain`, `degraded`, `clock-invalid`, `manual-only` (estados límite); y se registra solo en las transiciones.
 
 | Componente | Responsabilidad |
 |---|---|

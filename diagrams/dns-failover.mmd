@@ -17,13 +17,17 @@ flowchart TD
     FailCount --> OnFallback2{"already on fallback?"}
     OnFallback2 -->|"yes"| CheckB2["probe B"]
     CheckB2 --> B2ok{"B answers?"}
-    B2ok -->|"no"| Degraded["state=degraded<br/>log DEGRADED"]
+    B2ok -->|"no"| PlainDecide{"plainFallback?"}
+    PlainDecide -->|"yes"| PlainState["state=plain<br/>log PRIVACY DEGRADED<br/>plain DNS"]
+    PlainDecide -->|"no"| Degraded["state=degraded<br/>log DEGRADED"]
     B2ok -->|"yes"| StayB["stay on fallback"]
     OnFallback2 -->|"no"| Thr{"failCount >= failureThreshold?"}
     Thr -->|"no"| Suspect["state=suspect<br/>log SUSPECT (n/thr)"]
     Thr -->|"yes"| ProbeB["probe B first"]
     ProbeB --> Bok{"B answers?"}
-    Bok -->|"no"| Degraded2["state=degraded<br/>log DEGRADED (both down)"]
+    Bok -->|"no"| PlainDecide2{"plainFallback?"}
+    PlainDecide2 -->|"yes"| PlainState2["state=plain<br/>log PRIVACY DEGRADED"]
+    PlainDecide2 -->|"no"| Degraded2["state=degraded<br/>log DEGRADED (all down)"]
     Bok -->|"yes"| Switch["switch use-doh-server to B<br/>flush cache<br/>wait 3s"]
     Switch --> Verify{":resolve works?"}
     Verify -->|"yes"| Fallback["state=fallback<br/>log FALLBACK"]

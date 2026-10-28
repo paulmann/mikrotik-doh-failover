@@ -24,7 +24,7 @@ pflegen“ zum Artikel
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 auf `sysadministrator.ru`.
 
-> **Stand der Dokumentation.** Abgedeckte Version: **0.2.0** (Tag `v0.2.0`,
+> **Stand der Dokumentation.** Abgedeckte Version: **0.4.0** (`main`, letzter Tag `v0.3.1`),
 > 2026-10-26). Die Zahlen in „In Zahlen“ wurden mit `git ls-files` und
 > `Get-ChildItem` auf `main` am 2026-10-26 gemessen, nach dem
 > Dokumentationsdurchgang zu 0.2.0. Das
@@ -73,6 +73,12 @@ Dieses Projekt vermeidet beides:
   die Cloudflare-Kette auf 7.23/7.24 nicht abdeckt;
 - **statische A-Records als Bootstrap für beide Endpunkt-Hosts**, damit die
   Zustandsprüfung sie noch erreicht, wenn der Resolver selbst tot ist.
+
+## Was sich in 0.4.0 geändert hat
+
+- Die Endpoint-Prüfung läuft im Speicher: `/tool fetch ... as-value output=user`, ohne temporäre Dateien in `/file` und ohne Aufräum-Rennen. Die JSON-Prüfung akzeptiert `"Status":0` und `"Status": 0`.
+- Der Failover ist eine geordnete Kette: primary → secondary → tertiary (`dohUrlC`, optional) → plain DNS (`plainFallback`, standardmäßig aus).
+- Neuer Zustand `plain` (letzte Zuflucht plain DNS) mit Log `PRIVACY DEGRADED` und Rückkehr zum primary.
 
 ## Was sich in 0.2.0 geändert hat
 
@@ -154,7 +160,7 @@ Der Monitor schaltet `use-doh-server` nie um, um einen Endpunkt zu testen: Die
 Probe ist eine HTTPS-Anfrage aus `/tool fetch`, sodass eine Routineprüfung
 `/ip dns` unberührt lässt. Die Zustandsmaschine (Diagramm:
 [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) ist `healthy` → `suspect`
-→ `fallback` → `recovering` → `healthy` und protokolliert nur Übergänge.
+→ `fallback` → `recovering` → `healthy`; außerdem `stub`, `plain`, `degraded`, `clock-invalid`, `manual-only` (Randzustände); protokolliert nur Übergänge.
 
 | Komponente | Aufgabe |
 |---|---|

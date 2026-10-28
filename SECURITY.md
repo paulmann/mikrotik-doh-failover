@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---|---|
-| v0.3.1 (tagged, 2026-10-28) | yes — explicit state machine, hysteresis thresholds, concurrency guard, endpoint-driven failover |
-| v0.2.0 (tag `v0.2.0`, 2026-10-26) | yes — last tagged release |
+| `main` (0.4.0, unreleased) | yes — ordered DoH chain + optional plain fallback, in-memory probe, state machine, concurrency guard, endpoint-driven failover |
+| v0.3.1 (tagged, 2026-10-28) | yes — last tagged release |
+| v0.2.0 (tagged, 2026-10-26) | no |
 | v0.1.0 | no — the health check there accepted the stub pair `8.6.112.0`/`8.47.69.0` as a healthy answer and fell back to plain DNS |
 
 ## Reporting a vulnerability
@@ -33,14 +34,17 @@ passwords) and customer data.
 
 - The scripts import a CA **explicitly**; they never use `check-certificate=no`
   in a persistent configuration (bootstrap-only at most).
-- Since 0.2.0 the failover never falls back to plain DNS: measured substitution
-  on the path makes a plain fallback a silent outage. Both endpoints are DoH.
+- Since 0.2.0 the failover never falls back to plain DNS by default: measured
+  substitution on the path makes a plain fallback a silent outage. Both endpoints
+  are DoH. Since 0.4.0 a plain-DNS *last resort* exists but is **off by default**
+  (`plainFallback=false`) and, when enabled, is logged as `PRIVACY DEGRADED`.
 - Since 0.3 the monitor fails over on **endpoint health** (not only on the
   content check), so a primary that dies while the cache still holds answers is
   detected before the cache expires. The monitor is guarded against overlapping
   scheduler runs (a global flag cleared in `on-error`), and it refuses to act on
   a clock date outside `2025..2035` (past **and** future break certificate
-  validation).
+  validation). Since 0.4.0 the endpoint probe keeps the response body in memory
+  (`/tool fetch ... as-value output=user`) and writes no files to `/file`.
 - Script policies are narrowed to `read,write,policy,test`; the failover script
   does not carry `ftp`, `reboot`, `password`, `sniff`, `sensitive` or `romon`.
 - The resolver drops DNS from WAN and only redirects classic DNS (53). Client

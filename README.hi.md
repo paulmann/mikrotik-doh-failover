@@ -24,7 +24,7 @@ health-check जोड़ता है जो विफलता पर endpoint
 का «कैसे दोहराएँ और कैसे बनाए रखें» साथी दस्तावेज़ है, जो `sysadministrator.ru`
 पर है।
 
-> **दस्तावेज़ की स्थिति।** कवर किया गया संस्करण: **0.2.0** (tag `v0.2.0`,
+> **दस्तावेज़ की स्थिति।** कवर किया गया संस्करण: **0.4.0** (`main`, नवीनतम tag `v0.3.1`),
 > 2026-10-26)। «संख्याओं में» में दी गई संख्याएँ `main` पर 0.2.0 के दस्तावेज़
 > दौर के बाद,
 > 2026-10-26 को `git ls-files` और `Get-ChildItem` से मापी गई हैं। व्यवहार
@@ -71,6 +71,12 @@ health-check जोड़ता है जो विफलता पर endpoint
   Cloudflare chain को कवर नहीं करता;
 - **दोनों endpoint hosts के लिए bootstrap static A records**, ताकि health probe
   उन तक तब भी पहुँच सके जब resolver खुद मृत हो।
+
+## 0.4.0 में क्या बदला
+
+- endpoint probe मेमोरी में चलता है: `/tool fetch ... as-value output=user`, `/file` में कोई अस्थायी फ़ाइल नहीं और कोई cleanup race नहीं। JSON जाँच `"Status":0` और `"Status": 0` दोनों स्वीकार करती है।
+- failover एक क्रमबद्ध chain है: primary → secondary → tertiary (`dohUrlC`, वैकल्पिक) → plain DNS (`plainFallback`, डिफ़ॉल्ट रूप से बंद)।
+- नई स्थिति `plain` (अंतिम plain DNS विकल्प), लॉग `PRIVACY DEGRADED`, और primary पर वापसी।
 
 ## 0.2.0 में क्या बदला
 
@@ -150,7 +156,7 @@ flowchart LR
 Monitor endpoint जाँचने के लिए कभी `use-doh-server` नहीं बदलता: probe `/tool fetch`
 से भेजा गया HTTPS अनुरोध है, इसलिए नियमित जाँच `/ip dns` को अछूता छोड़ देती है।
 State machine (आरेख: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd))
-है `healthy` → `suspect` → `fallback` → `recovering` → `healthy`, लॉग केवल संक्रमणों पर।
+है `healthy` → `suspect` → `fallback` → `recovering` → `healthy`; साथ ही `stub`, `plain`, `degraded`, `clock-invalid`, `manual-only` (किनारे की स्थितियाँ); लॉग केवल संक्रमणों पर।
 
 | घटक | ज़िम्मेदारी |
 |---|---|

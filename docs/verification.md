@@ -34,10 +34,11 @@ Commands to confirm each subsystem, then a test checklist for the failover.
                                 # 8.6.112.0 / 8.47.69.0 = stub pair
 :put [:resolve pornhub.com]     # filtering resolvers: 0.0.0.0; standard: a real IP
 
-# endpoint answers at all (does not touch /ip dns)
-/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" \
-    http-header-field="accept: application/dns-json" dst-path="doh.json" mode=https
-#   expect: code 200 and "Status":0 inside doh.json
+# endpoint answers at all (does not touch /ip dns, no temp file)
+:local r [/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" \
+    http-header-field="accept: application/dns-json" mode=https as-value output=user]
+:put ($r->"status")                            # finished
+:put ([:find ($r->"data") "\"Status\":0"])     # >= 0
 ```
 
 DoH errors are visible in the log:
@@ -47,14 +48,14 @@ DoH errors are visible in the log:
 /log print where message~"DNS monitor"
 ```
 
-## Failover test checklist (0.3.0)
+## Failover test checklist (0.4.0)
 
 Run each step and confirm the expected result. The monitor can be executed by
-hand with `/system script run DNS_HealthMonitor_Failover`. With the 0.3.0
-hysteresis a failover needs `failureThreshold` (2) consecutive bad runs and the
-return needs `recoveryThreshold` (2) consecutive good runs, so the transitions
-below deliberately run the monitor more than once. Reset the state globals first
-to see each transition logged:
+hand with `/system script run DNS_HealthMonitor_Failover`. With the hysteresis a
+failover needs `failureThreshold` (2) consecutive bad runs and the return needs
+`recoveryThreshold` (2) consecutive good runs, so the transitions below
+deliberately run the monitor more than once. Reset the state globals first to see
+each transition logged:
 
 ```rsc
 :global DNSMonitorState; :set DNSMonitorState ""
@@ -78,6 +79,7 @@ to see each transition logged:
 | 10 | device-mode home | run the monitor on a `home` device | log `MONITOR_DISABLED_BY_DEVICE_MODE …`, state `manual-only` |
 | 11 | CAPsMAN clients | rejoin a client | client gets the router as DNS and resolves through it |
 | 12 | concurrency guard | `:global DNSMonitorRunning; :set DNSMonitorRunning true`, run the monitor | log `DNS monitor: skipped — a previous run is still active`, state unchanged |
+| 13 | plain-DNS last resort | set `plainFallback=true`, break the primary, secondary and tertiary, run the monitor twice | log `PRIVACY DEGRADED: all DoH endpoints unreachable — switched to plain DNS`, state `plain`; on the `home` device the plain step is skipped (`manual-only`) |
 
 Restore after each destructive test:
 

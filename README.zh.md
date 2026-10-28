@@ -19,7 +19,7 @@ RouterOS 会让局域网的 DNS 全部经由路由器转发，但默认情况下
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 的“如何复现并维护”配套材料。
 
-> **文档状态。** 覆盖版本：**0.2.0**（标签 `v0.2.0`，
+> **文档状态。** 覆盖版本：**0.4.0**（`main` 分支，最新标签 `v0.3.1`），
 > 2026-10-26）。“数字一览”中的计数由 `git ls-files` 和
 > `Get-ChildItem` 在 `main` 上于 2026-10-26 测得（0.2.0 文档整理之后）。行为已在
 > RouterOS 7.23.1 和 7.24.5 上验证；未在设备上验证的内容在正文中
@@ -63,6 +63,12 @@ RouterOS 会让局域网的 DNS 全部经由路由器转发，但默认情况下
   并不覆盖 Cloudflare 证书链；
 - **为两个端点主机名配置 bootstrap 静态 A 记录**，这样即使 resolver 本身已经失效，
   健康探测也能到达它们。
+
+## 0.4.0 有哪些变化
+
+- 端点探测在内存中进行：`/tool fetch ... as-value output=user`，不在 `/file` 留临时文件，也没有清理竞争。JSON 检查同时接受 `"Status":0` 和 `"Status": 0`。
+- 故障转移是有序链：primary → secondary → tertiary（`dohUrlC`，可选）→ plain DNS（`plainFallback`，默认关闭）。
+- 新增状态 `plain`（最后的 plain DNS 兜底），日志 `PRIVACY DEGRADED`，并可回到 primary。
 
 ## 0.2.0 有哪些变化
 
@@ -137,7 +143,7 @@ flowchart LR
 监控器从不通过切换 `use-doh-server` 来测试端点：探测是从 `/tool fetch` 发出的
 HTTPS 请求，因此例行检查不会改动 `/ip dns`。状态机
 （图见 [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)）
-为 `healthy` → `suspect` → `fallback` → `recovering` → `healthy`，只在状态跃迁时记录日志。
+为 `healthy` → `suspect` → `fallback` → `recovering` → `healthy`；另有 `stub`、`plain`、`degraded`、`clock-invalid`、`manual-only`（边缘状态）；只在状态跃迁时记录日志。
 
 | 组件 | 职责 |
 |---|---|

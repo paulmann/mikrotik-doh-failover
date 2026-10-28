@@ -24,7 +24,7 @@ RouterOS пропускает DNS локальной сети через роу�
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 на `sysadministrator.ru`.
 
-> **Состояние документации.** Покрытая версия — **0.2.0** (тег `v0.2.0`,
+> **Состояние документации.** Покрытая версия — **0.4.0** (`main`, последний тег `v0.3.1`),
 > 2026-10-26). Числа в разделе «В цифрах» измерены `git ls-files` и
 > `Get-ChildItem` на ветке `main` 2026-10-26, после прохода документации под
 > 0.2.0. Поведение
@@ -71,6 +71,12 @@ DoH-серверов через `/ip dns static-server type=doh` и ждать �
   цепочку Cloudflare на 7.23/7.24;
 - **статические A-записи для загрузки обоих хостов** — основного и резервного, чтобы
   проверка могла дойти до них, даже когда резолвер уже мёртв.
+
+## Что изменилось в 0.4.0
+
+- Проба endpoint идёт в памяти: `/tool fetch ... as-value output=user`, без временных файлов в `/file` и без гонок очистки. Проверка JSON принимает и `"Status":0`, и `"Status": 0`.
+- Фейловер — упорядоченная цепочка: primary → secondary → tertiary (`dohUrlC`, опционально) → plain DNS (`plainFallback`, по умолчанию выключен).
+- Новое состояние `plain` (последний резерв plain DNS) с логом `PRIVACY DEGRADED` и возвратом на primary.
 
 ## Что изменилось в 0.2.0
 
@@ -149,7 +155,7 @@ flowchart LR
 Монитор никогда не переключает `use-doh-server`, чтобы что-то проверить: зонд — это
 HTTPS-запрос через `/tool fetch`, поэтому обычная проверка не трогает `/ip dns`.
 Состояния (схема: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) —
-`healthy` → `suspect` → `fallback` → `recovering` → `healthy`, запись в журнал только при переходе.
+`healthy` → `suspect` → `fallback` → `recovering` → `healthy`; также `stub`, `plain`, `degraded`, `clock-invalid`, `manual-only` (крайние состояния); запись в журнал только при переходе.
 
 | Компонент | Задача |
 |---|---|

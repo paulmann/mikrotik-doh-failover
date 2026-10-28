@@ -96,10 +96,11 @@ such a workstation. Check the client: `ipconfig /all` → `DNS Servers`.
 stub answer is still a valid IP. Two different questions, two commands:
 
 ```rsc
-# 1. does the endpoint answer at all? (does not touch /ip dns)
-/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" \
-    http-header-field="accept: application/dns-json" dst-path="doh.json" mode=https
-#   expect: code 200, body contains "Status":0
+# 1. does the endpoint answer at all? (does not touch /ip dns, no temp file)
+:local r [/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" \
+    http-header-field="accept: application/dns-json" mode=https as-value output=user]
+:put ($r->"status")                            # finished
+:put ([:find ($r->"data") "\"Status\":0"])     # >= 0
 #   a 400/405 means the TLS handshake and certificate validation succeeded —
 #   the endpoint is alive, only the request form was wrong
 
