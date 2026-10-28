@@ -37,7 +37,9 @@ auf `sysadministrator.ru`.
 ## Inhalt
 
 - [Was das ist und warum](#was-das-ist-und-warum)
-- [Was sich in 0.2.0 geändert hat](#was-sich-in-020-geändert-hat)
+- [Was sich geändert hat](#was-sich-in-041-geändert-hat)
+- Was sich in 0.4.0 geändert hat
+- Was sich in 0.2.0 geändert hat
 - [Fähigkeiten](#fähigkeiten)
 - [In Zahlen](#in-zahlen)
 - [Funktionsweise](#funktionsweise)
@@ -73,6 +75,12 @@ Dieses Projekt vermeidet beides:
   die Cloudflare-Kette auf 7.23/7.24 nicht abdeckt;
 - **statische A-Records als Bootstrap für beide Endpunkt-Hosts**, damit die
   Zustandsprüfung sie noch erreicht, wenn der Resolver selbst tot ist.
+
+## Was sich in 0.4.1 geändert hat
+
+- Jeder `/tool fetch` trägt jetzt `duration=5s`, damit ein hängender Endpoint den Lauf nicht länger als das Scheduler-Intervall blockiert.
+- Der Tertiary-Wechsel wird nach dem Wechsel mit Rollback verifiziert (wie der Secondary), und jeder Wechsel erhöht `DNSFailoverAttempts`.
+- Die Erholung aus plain DNS klettert auf jeden funktionierenden DoH-Endpoint, nicht nur auf den Primary.
 
 ## Was sich in 0.4.0 geändert hat
 

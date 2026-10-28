@@ -37,7 +37,9 @@ en `sysadministrator.ru`.
 ## Contenido
 
 - [Qué es esto y por qué](#qué-es-esto-y-por-qué)
-- [Qué cambió en 0.2.0](#qué-cambió-en-020)
+- [Qué cambió](#qué-cambió-en-041)
+- Qué cambió en 0.4.0
+- Qué cambió en 0.2.0
 - [Capacidades](#capacidades)
 - [En cifras](#en-cifras)
 - [Cómo funciona](#cómo-funciona)
@@ -71,6 +73,12 @@ Este proyecto evita ambas cosas:
   integrado no cubre la cadena de Cloudflare en 7.23/7.24;
 - **registros A estáticos de bootstrap para los dos hosts de endpoint**, para que
   la sonda de salud pueda alcanzarlos incluso cuando el resolver está muerto.
+
+## Qué cambió en 0.4.1
+
+- Cada `/tool fetch` ahora lleva `duration=5s`, para que un endpoint colgado no bloquee la ejecución más allá del intervalo del planificador.
+- El cambio a tertiary se verifica después del cambio con rollback (igual que el secondary), y cada cambio incrementa `DNSFailoverAttempts`.
+- La recuperación desde plain DNS sube a cualquier endpoint DoH que funcione, no solo al primary.
 
 ## Qué cambió en 0.4.0
 

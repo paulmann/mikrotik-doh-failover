@@ -37,7 +37,9 @@ health-check जोड़ता है जो विफलता पर endpoint
 ## विषय-सूची
 
 - [यह क्या है और क्यों](#यह-क्या-है-और-क्यों)
-- [0.2.0 में क्या बदला](#020-में-क्या-बदला)
+- [क्या बदला](#041-में-क्या-बदला)
+- 0.4.0 में क्या बदला
+- 0.2.0 में क्या बदला
 - [क्षमताएँ](#क्षमताएँ)
 - [संख्याओं में](#संख्याओं-में)
 - [यह कैसे काम करता है](#यह-कैसे-काम-करता-है)
@@ -71,6 +73,12 @@ health-check जोड़ता है जो विफलता पर endpoint
   Cloudflare chain को कवर नहीं करता;
 - **दोनों endpoint hosts के लिए bootstrap static A records**, ताकि health probe
   उन तक तब भी पहुँच सके जब resolver खुद मृत हो।
+
+## 0.4.1 में क्या बदला
+
+- हर `/tool fetch` अब `duration=5s` लेकर चलता है, ताकि अटका endpoint run को scheduler interval से ज़्यादा न रोके।
+- tertiary स्विच अब switch के बाद rollback के साथ जाँचा जाता है (secondary की तरह), और हर switch `DNSFailoverAttempts` बढ़ाता है।
+- plain DNS से recovery अब किसी भी काम करने वाले DoH endpoint पर चढ़ती है, सिर्फ़ primary पर नहीं।
 
 ## 0.4.0 में क्या बदला
 

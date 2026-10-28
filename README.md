@@ -33,7 +33,9 @@ on `sysadministrator.ru`.
 ## Contents
 
 - [What this is and why](#what-this-is-and-why)
-- [What changed in 0.2.0](#what-changed-in-020)
+- [What changed](#what-changed-in-041)
+- What changed in 0.4.0
+- What changed in 0.2.0
 - [Capabilities](#capabilities)
 - [By the numbers](#by-the-numbers)
 - [How it works](#how-it-works)
@@ -66,6 +68,12 @@ This project avoids both:
   cover the Cloudflare chain on 7.23/7.24;
 - **bootstrap static A records for both endpoint hosts**, so the health probe
   can reach them even when the resolver itself is dead.
+
+## What changed in 0.4.1
+
+- Every `/tool fetch` now carries `duration=5s`, so a hung endpoint cannot block the run past the scheduler interval.
+- The tertiary switch is verified after the switch with rollback (like the secondary), and every switch increments `DNSFailoverAttempts`.
+- Recovery from plain DNS climbs to any working DoH endpoint, not only the primary.
 
 ## What changed in 0.2.0
 
