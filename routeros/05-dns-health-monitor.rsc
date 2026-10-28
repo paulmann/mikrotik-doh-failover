@@ -1,8 +1,18 @@
-# 05-dns-health-monitor.rsc — version 4.0 (0.4.x)
+# 05-dns-health-monitor.rsc — version 4.1 (0.4.x)
 # Managed DoH-to-DoH failover with content-aware probing and an explicit state
 # machine. This is MANAGED failover (the upstream changes on a fault), not
 # "transparent" failover: primary and fallback are different operators and may
 # answer differently (filtering, geo, CDN steering).
+#
+# CHANGES IN 4.1 (relative to 4.0)
+#   1. Every /tool fetch now carries duration=5s, so a hung endpoint cannot block
+#      the run past the scheduler interval (verified on 7.23.1).
+#   2. The tertiary switch now does the same probe-before + verify-after + rollback
+#      as the secondary, and every real switch (secondary, tertiary, plain)
+#      increments DNSFailoverAttempts.
+#   3. Recovery from the plain fallback climbs back to any DoH endpoint (not only
+#      the primary): if the primary is still down but the secondary answers, the
+#      monitor leaves plain DNS and returns to DoH.
 #
 # CHANGES IN 4.0 (relative to 3.1)
 #   1. Probe rewritten to `/tool fetch ... as-value output=user`: the response
@@ -96,7 +106,7 @@
                 # --- 3: probe the primary endpoint (HTTPS, does not touch /ip dns) ---
                 :local probeA "unreachable"
                 :do {
-                    :local rA [/tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                    :local rA [/tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                     :local bodyA ($rA->"data")
                     :if (($rA->"status") = "finished") do={
                         :if (([:find $bodyA "\"Status\":0"] >= 0) or ([:find $bodyA "\"Status\": 0"] >= 0)) do={ :set probeA "ok" } else={ :set probeA "bad-status" }
@@ -152,14 +162,30 @@
                             }
                         } else={
                             :set DNSRecoverCount 0
-                            :if ($DNSMonitorState != "plain") do={
+                            :if ($DNSMonitorState = "plain") do={
+                                :local probeB "unreachable"
+                                :do {
+                                    :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
+                                    :local bodyB ($rB->"data")
+                                    :if (($rB->"status") = "finished") do={
+                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                    } else={ :set probeB "unreachable" }
+                                } on-error={ :set probeB "unreachable" }
+                                :if ($probeB = "ok") do={
+                                    /ip dns set use-doh-server=$dohUrlB verify-doh-cert=yes
+                                    /ip dns set servers=""
+                                    /ip dns cache flush
+                                    :set DNSMonitorState "fallback"
+                                    :log warning ("RECOVERY: primary still down — climbed from plain DNS back to fallback DoH (" . $dohUrlB . ")")
+                                }
+                            } else={
                                 :if ($DNSMonitorState != "fallback") do={
                                     :set DNSMonitorState "fallback"
                                     :log info "RECOVERING: primary still unreachable — staying on the fallback"
                                 }
                                 :local probeB "unreachable"
                                 :do {
-                                    :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                    :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                     :local bodyB ($rB->"data")
                                     :if (($rB->"status") = "finished") do={
                                         :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
@@ -188,7 +214,7 @@
                                 :if (($applyChanges) and ($DNSFailoverAttempts < $maxAttempts)) do={
                                     :local probeB "unreachable"
                                     :do {
-                                        :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                        :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                         :local bodyB ($rB->"data")
                                         :if (($rB->"status") = "finished") do={
                                             :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
@@ -215,7 +241,7 @@
                                         :local probeC "unreachable"
                                         :if ([:len $dohUrlC] > 0) do={
                                             :do {
-                                                :local rC [/tool fetch url=$probeUrlC http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                                :local rC [/tool fetch url=$probeUrlC http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                                 :local bodyC ($rC->"data")
                                                 :if (($rC->"status") = "finished") do={
                                                     :if (([:find $bodyC "\"Status\":0"] >= 0) or ([:find $bodyC "\"Status\": 0"] >= 0)) do={ :set probeC "ok" } else={ :set probeC "bad-status" }
@@ -223,19 +249,31 @@
                                             } on-error={ :set probeC "unreachable" }
                                         }
                                         :if ($probeC = "ok") do={
+                                            :set DNSFailoverAttempts ($DNSFailoverAttempts + 1)
                                             /ip dns set use-doh-server=$dohUrlC verify-doh-cert=yes
                                             /ip dns cache flush
-                                            :set DNSMonitorState "fallback"
-                                            :set DNSRecoverCount 0
-                                            :log warning ("FALLBACK: primary and secondary down — switched to tertiary DoH (" . $dohUrlC . ")")
+                                            :delay 3s
+                                            :local testC ""
+                                            :do { :set testC [:tostr [:resolve "example.com"]] } on-error={ :set testC "" }
+                                            :if ([:len $testC] > 0) do={
+                                                :set DNSMonitorState "fallback"
+                                                :set DNSRecoverCount 0
+                                                :log warning ("FALLBACK: switched to tertiary DoH (" . $dohUrlC . "), example.com -> " . $testC)
+                                            } else={
+                                                /ip dns set use-doh-server=$dohUrlA verify-doh-cert=yes
+                                                /ip dns cache flush
+                                                :set DNSMonitorState "degraded"
+                                                :log error "DEGRADED: tertiary DoH did not resolve either — rolled back to the primary; check the CA for the tertiary host"
+                                            }
                                         } else={
                                             :if ($plainFallback) do={
+                                                :set DNSFailoverAttempts ($DNSFailoverAttempts + 1)
                                                 /ip dns set use-doh-server=""
                                                 /ip dns set servers=$plainServers
                                                 /ip dns cache flush
                                                 :set DNSMonitorState "plain"
                                                 :set DNSRecoverCount 0
-                                                :log error "PRIVACY DEGRADED: all DoH endpoints unreachable — switched to plain DNS (no encryption)"
+                                                :log error ("PRIVACY DEGRADED: all DoH endpoints unreachable — switched to plain DNS (attempt " . $DNSFailoverAttempts . "); bootstrap statics preserved for recovery")
                                             } else={
                                                 :if ($DNSMonitorState != "degraded") do={
                                                     :set DNSMonitorState "degraded"
