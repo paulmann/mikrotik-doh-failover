@@ -47,23 +47,35 @@ DoH errors are visible in the log:
 /log print where message~"DNS monitor"
 ```
 
-## Failover test checklist (0.2.0)
+## Failover test checklist (0.3.0)
 
 Run each step and confirm the expected result. The monitor can be executed by
-hand with `/system script run DNS_HealthMonitor_Failover`; reset the state
-variables first (`:global DNSMonitorState; :set DNSMonitorState ""`) if you want
-the transition logged again.
+hand with `/system script run DNS_HealthMonitor_Failover`. With the 0.3.0
+hysteresis a failover needs `failureThreshold` (2) consecutive bad runs and the
+return needs `recoveryThreshold` (2) consecutive good runs, so the transitions
+below deliberately run the monitor more than once. Reset the state globals first
+to see each transition logged:
+
+```rsc
+:global DNSMonitorState; :set DNSMonitorState ""
+:global DNSFailCount; :set DNSFailCount 0
+:global DNSRecoverCount; :set DNSRecoverCount 0
+:global DNSFailoverAttempts; :set DNSFailoverAttempts 0
+```
 
 | # | Scenario | Setup | Expected |
 |---|---|---|---|
-| 1 | normal | DoH configured, answers real | `:resolve example.com` → `104.20.x`/`172.66.x`, log `answers look sane` (once) |
-| 2 | stub pair | resolver returns `8.6.112.0`/`8.47.69.0` | state `stub`, one warning, **no** failover |
-| 3 | primary DoH down | `/ip dns set use-doh-server="https://192.0.2.1/dns-query"`, flush, run monitor | log `primary DoH unreachable`, then `switched to fallback DoH … example.com -> …`, `use-doh-server` = fallback |
-| 4 | both down | as #3 but fallback also unreachable (`https://192.0.2.2/dns-query`) | log `both endpoints unreachable — keeping the current configuration`; `use-doh-server` unchanged |
-| 5 | fallback answers but does not resolve | fallback host has no trusted CA | log `fallback DoH did not resolve either — rolled back`; `use-doh-server` back to the primary |
-| 6 | recovery | restore the real primary, run monitor | log `primary DoH answers again — switched back from the fallback`, state `healthy` |
-| 7 | wrong clock | set the year back, run monitor | log `clock looks wrong … certificate validation cannot succeed`, nothing else |
-| 8 | CAPsMAN clients | rejoin a client | client gets the router as DNS and resolves through it |
+| 1 | normal | DoH configured, answers real | state `healthy`, log `HEALTHY: answers look sane …` (once) |
+| 2 | single blip | break the primary, run the monitor **once** | state `suspect`, log `SUSPECT: primary unreachable (1/2)` — **no** failover yet (anti-flap) |
+| 3 | two bad runs | run the monitor a second time | state `fallback`, log `FALLBACK: switched to fallback DoH …`, `use-doh-server` = fallback |
+| 4 | stub pair | resolver returns `8.6.112.0`/`8.47.69.0` | state `stub`, log `STUB: answers are the stub pair …`, **no** failover |
+| 5 | both down | primary and fallback both unreachable | state `degraded`, log `DEGRADED: both endpoints unreachable …`, `use-doh-server` unchanged |
+| 6 | fallback answers but does not resolve | fallback host has no trusted CA | log `DEGRADED: fallback DoH did not resolve either — rolled back`; `use-doh-server` back to the primary |
+| 7 | recovery, first run | restore the primary, run the monitor once | state `recovering`, log `RECOVERING: primary answers again (1/2)` — still on the fallback |
+| 8 | recovery, second run | run the monitor again | state `healthy`, log `HEALTHY: primary DoH answers again …` |
+| 9 | wrong clock | set the year back, run monitor | log `CLOCK_INVALID: clock looks wrong …`, nothing else |
+| 10 | device-mode home | run the monitor on a `home` device | log `MONITOR_DISABLED_BY_DEVICE_MODE …`, state `manual-only` |
+| 11 | CAPsMAN clients | rejoin a client | client gets the router as DNS and resolves through it |
 
 Restore after each destructive test:
 
@@ -71,6 +83,8 @@ Restore after each destructive test:
 /ip dns set use-doh-server="https://cloudflare-dns.com/dns-query" verify-doh-cert=yes
 /ip dns cache flush
 :global DNSMonitorState; :set DNSMonitorState ""
+:global DNSFailCount; :set DNSFailCount 0
+:global DNSRecoverCount; :set DNSRecoverCount 0
 :global DNSFailoverAttempts; :set DNSFailoverAttempts 0
 ```
 

@@ -98,7 +98,7 @@ declares it and never reads it, so nothing in the log depends on it (measured
 | Capability | Detail |
 |---|---|
 | Encrypted upstream | one DoH upstream with `verify-doh-cert=yes` |
-| Fallback | a second **DoH** endpoint (Google) when the primary is unreachable |
+| Fallback | a second **DoH** endpoint (Google) when the primary is unreachable — managed, not transparent: the operator changes |
 | Recovery | automatic return to the primary after the health check passes |
 | Health check | judges the ANSWER (content), not the type; probes endpoints with `/tool fetch` |
 | Bootstrap | static A records for both endpoint hostnames |
@@ -136,7 +136,7 @@ flowchart LR
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
     Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
-    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor["health monitor every interval (60s default)"] -->|"3 canaries, content judged"| Resolver
     Monitor -->|"/tool fetch probe"| DoH
     Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
@@ -146,8 +146,12 @@ flowchart LR
 
 The monitor never toggles `use-doh-server` to test an endpoint: the probe is an
 HTTPS request from `/tool fetch`, so a routine check leaves `/ip dns` alone. The
-state machine (diagram: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd))
-is `healthy` → `stub` → `dead` → `failoverB`, logged on transitions only.
+state machine (diagram: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd),
+full definition in [`docs/architecture.md`](docs/architecture.md)) is
+`healthy` → `suspect` → `fallback` → `recovering` → `healthy`, with `stub`,
+`degraded`, `clock-invalid` and `manual-only` as terminal/edge states. Failover
+is **managed**, not transparent: the upstream operator changes, so answers,
+filtering and geo behaviour may change too.
 
 | Component | Responsibility |
 |---|---|
@@ -166,6 +170,13 @@ Requirements:
   **7.24.5**;
 - NTP synchronized;
 - `device-mode` `advanced` for the automatic failover **scheduler**.
+
+> **`device-mode=home`.** On `home` devices the failover scheduler and
+> `/tool fetch` are rejected (`not allowed by device-mode`): DoH and force-DNS
+> still work, but the monitor runs manually and cannot fail over — it logs
+> `MONITOR_DISABLED_BY_DEVICE_MODE` and enters `manual-only`. Switch to
+> `advanced` (`/system/device-mode/update device-mode=advanced`, then confirm and
+> reboot) for automatic failover.
 
 Quick start (standard Cloudflare, no filtering — the default since 0.2.0):
 
@@ -197,14 +208,14 @@ raw URLs to `v0.2.0` (or a commit) is safer than `main`; `main` is ahead of the 
 
 | Situation | Behaviour |
 |---|---|
-| DoH unreachable | monitor switches to the fallback DoH, verifies it, rolls back if it fails (logged `error`/`warning`) |
-| DoH recovers | monitor returns to the primary (logged `warning`) |
-| Both endpoints down | monitor keeps the current configuration and logs `error` once |
-| Answers are the stub pair | monitor logs it once and does **not** fail over — a second endpoint returns the same pair (§6.10) |
-| Clock is wrong | monitor logs `clock looks wrong …` and stops, because certificate validation cannot succeed on a wrong date |
-| Failover keeps failing | at most 3 attempts per outage, then the monitor waits for the primary to recover instead of filling the log |
-| Client uses its own DoH/DoT | **not blocked** (documented limit) |
-| `device-mode=home` | `fetch` and the scheduler are rejected; run the monitor by hand |
+| Primary DoH unreachable | after `failureThreshold` bad runs the monitor switches to the fallback, verifies it, rolls back if it fails |
+| Primary DoH recovers | after `recoveryThreshold` good runs the monitor returns to the primary |
+| Both endpoints down | state `degraded`: keeps the current configuration, logs once |
+| Answers are the stub pair | state `stub`: logs once, does **not** fail over (§6.10) |
+| Clock is wrong | state `clock-invalid`: logs `CLOCK_INVALID` and stops — `verify-doh-cert` cannot succeed on a wrong date |
+| Failover keeps failing | at most `maxAttempts` (3) per outage, then the monitor waits for the primary |
+| `device-mode=home` | state `manual-only`: logs `MONITOR_DISABLED_BY_DEVICE_MODE`; run by hand, no failover |
+| Client uses its own DoH/DoT | not blocked in `standard`; `strict` blocks DoT 853 and known public DoH endpoints (residual risk documented) |
 
 ### Scheduler rejected: `not allowed by device-mode`
 

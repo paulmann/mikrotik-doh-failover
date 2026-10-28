@@ -1,20 +1,30 @@
 flowchart TD
-    Start["monitor runs (3m)"] --> Clock{"clock sane?"}
-    Clock -->|"no"| ClockWarn["log error<br/>cert validation impossible<br/>stop"]
+    Start["monitor runs (interval)"] --> DeviceMode{"device-mode=advanced?"}
+    DeviceMode -->|"no (home)"| Manual["state=manual-only<br/>log MONITOR_DISABLED_BY_DEVICE_MODE<br/>stop"]
+    DeviceMode -->|"yes"| Clock{"clock sane?"}
+    Clock -->|"no"| ClockInv["state=clock-invalid<br/>log CLOCK_INVALID<br/>stop"]
     Clock -->|"yes"| Answers["resolve 3 canaries<br/>judge CONTENT, not type"]
     Answers --> Good{"any real address?"}
-    Good -->|"yes"| Home{"state == failoverB?"}
-    Home -->|"yes"| Back["switch back to DoH A<br/>reset attempts<br/>log warning"]
-    Home -->|"no"| Healthy["state=healthy<br/>log on transition"]
+    Good -->|"yes"| OnFallback{"on fallback / recovering?"}
+    OnFallback -->|"yes"| Recover["recoverCount+1"]
+    Recover --> RecoverThr{">= recoveryThreshold?"}
+    RecoverThr -->|"no"| Recovering["state=recovering<br/>log RECOVERING (n/thr)"]
+    RecoverThr -->|"yes"| Healthy["switch back to primary<br/>state=healthy<br/>log HEALTHY"]
+    OnFallback -->|"no"| Healthy2["state=healthy<br/>reset counters"]
     Good -->|"no"| Stub{"answers are<br/>8.6.112.x / 8.47.69.x?"}
-    Stub -->|"yes"| StubState["state=stub<br/>log warning once<br/>second endpoint returns same pair<br/>no failover"]
-    Stub -->|"no"| ProbeA["probe endpoint A<br/>/tool fetch + JSON"]
-    ProbeA --> AliveA{"A answers?"}
-    AliveA -->|"yes"| Flush["flush cache<br/>state=dead<br/>re-check next run"]
-    AliveA -->|"no"| ProbeB["probe endpoint B"]
-    ProbeB --> AliveB{"B answers?"}
-    AliveB -->|"no"| Keep["state=dead<br/>both unreachable<br/>keep current config"]
-    AliveB -->|"yes"| Switch["switch use-doh-server to B<br/>flush cache<br/>wait 3s"]
+    Stub -->|"yes"| StubState["state=stub<br/>log STUB once<br/>second endpoint returns same pair<br/>no failover"]
+    Stub -->|"no"| FailCount["failCount+1<br/>recoverCount=0"]
+    FailCount --> OnFallback2{"already on fallback?"}
+    OnFallback2 -->|"yes"| CheckB2["probe B"]
+    CheckB2 --> B2ok{"B answers?"}
+    B2ok -->|"no"| Degraded["state=degraded<br/>log DEGRADED"]
+    B2ok -->|"yes"| StayB["stay on fallback"]
+    OnFallback2 -->|"no"| Thr{"failCount >= failureThreshold?"}
+    Thr -->|"no"| Suspect["state=suspect<br/>log SUSPECT (n/thr)"]
+    Thr -->|"yes"| ProbeB["probe B first"]
+    ProbeB --> Bok{"B answers?"}
+    Bok -->|"no"| Degraded2["state=degraded<br/>log DEGRADED (both down)"]
+    Bok -->|"yes"| Switch["switch use-doh-server to B<br/>flush cache<br/>wait 3s"]
     Switch --> Verify{":resolve works?"}
-    Verify -->|"yes"| Failover["state=failoverB<br/>log warning<br/>attempts+1"]
-    Verify -->|"no"| Rollback["roll back to A<br/>state=dead<br/>log error: check CA for B"]
+    Verify -->|"yes"| Fallback["state=fallback<br/>log FALLBACK"]
+    Verify -->|"no"| Rollback["roll back to A<br/>state=degraded"]

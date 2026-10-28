@@ -58,9 +58,17 @@ On `home` devices `/tool fetch` and `/system scheduler add` are rejected with
 /system script run DNS_HealthMonitor_Failover    # manual run
 ```
 
-Note that without `fetch` the 0.2.0 monitor cannot probe the endpoints and will
-report `unreachable` for both; on such devices it degrades to "keep the current
-configuration", which is the safe outcome.
+Note that without `fetch` the monitor cannot probe the endpoints. Since 0.3.0 it
+detects this explicitly and logs once
+
+```rsc
+/log print where message~"MONITOR_DISABLED_BY_DEVICE_MODE"
+#   MONITOR_DISABLED_BY_DEVICE_MODE: device-mode=home — /tool fetch and the
+#   scheduler are unavailable; run the monitor by hand and expect no failover
+```
+
+and enters the `manual-only` state instead of reporting `unreachable` for both
+endpoints as if it were a network fault.
 
 To enable the scheduler, switch the device to `advanced` (owner decision,
 then confirm and reboot):

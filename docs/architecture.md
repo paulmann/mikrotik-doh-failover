@@ -111,9 +111,11 @@ should be configured there instead.
 
 ### 3.5 Monitoring and failover
 
-The monitor runs every 3 minutes, keeps its state in two globals
-(`DNSMonitorState`, `DNSFailoverAttempts`) and logs only on transitions, so a
-broken resolver does not flood the log.
+The monitor runs every `interval` (60s default; 3m is fine for a home device),
+keeps its state in globals (`DNSMonitorState`, `DNSFailCount`,
+`DNSRecoverCount`, `DNSFailoverAttempts`) and logs only on transitions, so a
+broken resolver does not flood the log. Transitions are tagged with an UPPERCASE
+state name (`HEALTHY`, `SUSPECT`, `FALLBACK`, …) so a log monitor can match them.
 
 Two independent measurements per run:
 
@@ -121,17 +123,47 @@ Two independent measurements per run:
    resolver and the result is judged by content: empty, `0.0.0.0` and the stub
    pair `8.6.112.0`/`8.47.69.0` all count as unusable. v1 judged only the type
    (`ip`), which is why it called the stub pair healthy.
-2. **Does each endpoint answer?** Both endpoints are probed with `/tool fetch`
-   against their DNS-JSON API. This does not touch `/ip dns`, so a check no
-   longer takes the LAN off DoH the way v1 did.
+2. **Does each endpoint answer?** The primary (and, before a switch, the
+   fallback) is probed with `/tool fetch` against its DNS-JSON API. This does not
+   touch `/ip dns`, so a routine check never takes the LAN off DoH.
 
-| State | Condition | Action | Log |
-|---|---|---|---|
-| `healthy` | at least one canary returns a real address | if on the fallback, switch back to primary; reset attempts | `info`/`warning` on transition |
-| `stub` | answers are the stub pair | nothing — a second endpoint returns the same pair | `warning` once |
-| `dead` | no usable answers, endpoint answering | flush cache, re-check next run | `warning` once |
-| `failoverB` | primary unreachable, fallback probed OK, switch verified | stay on fallback; try to come home each run | `warning` once |
-| `dead` (both) | neither endpoint reachable | keep the current configuration; stop after `maxAttempts` | `error` once |
+### State machine
+
+```text
+CLOCK_INVALID   (wrong date — certificate validation cannot succeed)
+
+HEALTHY --canary fails--> SUSPECT
+SUSPECT --canary passes--> HEALTHY
+SUSPECT --failureThreshold bad runs--> FALLBACK   (fallback probed before, verified after)
+FALLBACK --primary passes--> RECOVERING
+RECOVERING --recoveryThreshold good runs--> HEALTHY
+RECOVERING --primary fails again--> FALLBACK
+SUSPECT / FALLBACK --both endpoints unreachable--> DEGRADED
+any --answers are the stub pair--> STUB          (not a failover-able fault)
+any --device-mode=home--> MANUAL-ONLY
+```
+
+| State | Condition | Action |
+|---|---|---|
+| `healthy` | at least one canary returns a real address | primary active; reset counters |
+| `suspect` | a bad run seen, below `failureThreshold` | keep the primary, keep counting |
+| `stub` | answers are the stub pair | nothing — a second endpoint returns the same pair (§6.10) |
+| `fallback` | primary failed `failureThreshold` runs, fallback verified | on the fallback endpoint |
+| `recovering` | primary answers again, below `recoveryThreshold` | still on the fallback, counting up |
+| `degraded` | both endpoints unreachable | keep the current configuration |
+| `clock-invalid` | clock date wrong | stop — `verify-doh-cert` cannot succeed |
+| `manual-only` | `device-mode=home` | no `fetch`/scheduler — run by hand, no failover |
+
+**Anti-flap.** The two thresholds are the hysteresis: `failureThreshold`
+consecutive bad runs to leave the primary, `recoveryThreshold` consecutive good
+runs to come home. With `interval=60s` and `threshold=2` a switch needs ~2
+minutes in either direction, so a single blip does not move the router.
+
+**Vendor coupling.** The fallback is a *different operator* (Google by default),
+so a failover changes the upstream and therefore its answers, filtering and geo
+behaviour. This is **managed failover**, not transparent failover. The fallback
+is a single endpoint (`dohUrlB`): RouterOS allows one active `use-doh-server`, so
+"a list of fallbacks" means trying endpoints one at a time, not load-balancing.
 
 A failover is attempted at most `maxAttempts` (3) times per outage; the fallback
 is probed **before** switching and the switch is verified **after**, with an

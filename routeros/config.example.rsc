@@ -21,11 +21,24 @@
 # see docs/troubleshooting.md §6.10 before blaming the resolver.
 # --- DoH failover (05-dns-health-monitor.rsc) ---
 # Only one DoH endpoint can be active; the monitor switches between these two.
+# This is MANAGED failover (the upstream changes), not "transparent": primary and
+# fallback are different operators and may answer differently (filtering, geo,
+# CDN steering). There is no multi-endpoint list in RouterOS — one active
+# use-doh-server — so "a list of fallbacks" is at most "try one, then another".
 :global dohUrlB    "https://dns.google/dns-query"                 # fallback
 :global probeUrlA  "https://cloudflare-dns.com/dns-query?name=example.com&type=A"
 :global probeUrlB  "https://dns.google/resolve?name=example.com&type=A"
 # The fallback needs its own root CA in the trust store, otherwise verify-doh-cert=yes
 # rejects it and the monitor rolls back (and says so in the log).
+# Quad9 cannot be used as the fallback with the JSON probe (its dns-query does not
+# decode the GET ?name= form) — see docs/troubleshooting.md §6.12.
+# --- Monitor tuning (05-dns-health-monitor.rsc) ---
+:global monitorInterval   "60s"   # 45-60s for an office; 3m acceptable for home
+:global failureThreshold  2       # consecutive bad runs before a failover (anti-flap)
+:global recoveryThreshold 2       # consecutive good runs before coming home (anti-flap)
+:global maxAttempts       3       # failover attempts per outage
+# --- Enforcement (02-security-policies.rsc) ---
+:global enforcement "standard"    # "standard" (53 redirect only) | "strict" (+ block DoT 853 and known public DoH endpoints)
 # --- CA (00-install-ca.rsc) ---
 # Cloudflare DoH chain root: SSL.com TLS ECC Root CA 2022  (certs/cloudflare-doh-ca.crt)
 # Quad9/Google need their own root CA; take it from the provider's site.

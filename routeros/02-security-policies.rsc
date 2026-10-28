@@ -1,11 +1,13 @@
 # 02-security-policies.rsc
 # Force LAN clients through the router resolver and protect the resolver itself.
 #
-# Honest scope: these rules redirect CLASSIC DNS (UDP/TCP 53) to the router.
-# They do NOT stop a client from using its own DoH (TCP 443), DoT (TCP 853) or
-# hardcoded resolvers. To also reduce DoT bypass, uncomment the TCP/853 drop
-# block at the bottom; blocking client DoH over 443 needs a proxy/DPI and is out
-# of scope here.
+# Honest scope: the standard mode redirects CLASSIC DNS (UDP/TCP 53) to the
+# router. It does NOT stop a client from using its own DoH (TCP 443), DoT
+# (TCP 853) or a hardcoded resolver. The optional `enforcement=strict` mode adds
+# a DoT block and a block of the well-known public DoH endpoints, but even then
+# blocking client DoH over arbitrary HTTPS/443 needs a proxy/DPI and is out of
+# scope. A strict profile does NOT claim 100% coverage; it documents the residual
+# risk instead of hiding it.
 #
 # AND — measured 2026-10-26, easy to miss — the redirect rules do not apply to
 # clients that already ask the router itself (the address handed out by DHCP).
@@ -18,6 +20,7 @@
 :local bridge   "bridge"    # LAN bridge name (e.g. bridge / bridge1)
 :local lanList  "LAN"       # interface list that contains LAN interfaces
 :local wanList  "WAN"       # interface list that contains WAN interfaces
+:local enforcement "standard"   # "standard" | "strict"
 # ==================
 # 1) Force-DNS: redirect every DNS query arriving on the LAN bridge to the router.
 #    `redirect` rewrites the destination to the router's own address on that
@@ -30,8 +33,19 @@
 # 3) Drop DNS from the outside so the router is not an open resolver.
 /ip firewall filter add chain=input action=drop protocol=udp dst-port=53 in-interface-list=$wanList comment="drop DNS UDP from WAN" place-before=0
 /ip firewall filter add chain=input action=drop protocol=tcp dst-port=53 in-interface-list=$wanList comment="drop DNS TCP from WAN" place-before=0
-# 4) Optional: block DoT to public resolvers (TCP 853) for LAN clients.
-# /ip firewall filter add chain=forward action=drop protocol=tcp dst-port=853 in-interface-list=$lanList comment="block DoT out"
+# 4) Strict enforcement: block DoT and the well-known public DoH endpoints.
+#    Residual risk: DoH over an unknown endpoint or a hardcoded CDN IP on 443
+#    still passes; fully closing that needs a proxy/DPI.
+:if ($enforcement = "strict") do={
+    /ip firewall filter add chain=forward action=drop protocol=tcp dst-port=853 in-interface-list=$lanList comment="block DoT out (strict)" place-before=0
+    /ip firewall address-list add list=public-doh address=1.1.1.1 comment="Cloudflare"
+    /ip firewall address-list add list=public-doh address=1.0.0.1 comment="Cloudflare"
+    /ip firewall address-list add list=public-doh address=8.8.8.8 comment="Google"
+    /ip firewall address-list add list=public-doh address=8.8.4.4 comment="Google"
+    /ip firewall address-list add list=public-doh address=9.9.9.9 comment="Quad9"
+    /ip firewall address-list add list=public-doh address=149.112.112.112 comment="Quad9"
+    /ip firewall filter add chain=forward action=drop protocol=tcp dst-port=443 dst-address-list=public-doh in-interface-list=$lanList comment="block known DoH endpoints (strict)" place-before=0
+}
 # Verify:
 /ip firewall nat print where comment~"force DNS"
-/ip firewall filter print where comment~"DNS" or comment~"DoT"
+/ip firewall filter print where comment~"DNS" or comment~"DoT" or comment~"DoH"

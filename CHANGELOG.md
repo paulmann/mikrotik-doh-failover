@@ -7,6 +7,9 @@ uses [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- `routeros/02-security-policies.rsc` — `enforcement=strict` mode: blocks DoT
+  (TCP 853) and the well-known public DoH endpoints (address-list `public-doh`),
+  with the residual risk documented instead of hidden.
 - `zabbix/` — fleet monitoring for Zabbix 8: a collector that reads DoH state
   (`/ip dns use-doh-server`, three canaries) and VPN state (WireGuard peers,
   handshake age) from six routers over SSH and pushes it to trapper items;
@@ -17,6 +20,17 @@ uses [Semantic Versioning](https://semver.org/).
   matching the repository's `*.ru.md` convention for translated copies.
 
 ### Changed
+- `routeros/05-dns-health-monitor.rsc` — explicit state machine
+  (`HEALTHY → SUSPECT → FALLBACK → RECOVERING → HEALTHY`, plus `STUB`,
+  `DEGRADED`, `CLOCK_INVALID`, `MANUAL-ONLY`); configurable `interval` (60s
+  default, was a hardcoded 3m); `failureThreshold`/`recoveryThreshold` hysteresis
+  as the anti-flap mechanism; `MONITOR_DISABLED_BY_DEVICE_MODE` diagnostics for
+  `device-mode=home`; wording "managed failover" instead of implying transparency.
+- `routeros/config.example.rsc` — new tunables: `monitorInterval`,
+  `failureThreshold`, `recoveryThreshold`, `enforcement`.
+- `docs/architecture.md`, `README.md`, `docs/troubleshooting.md`,
+  `docs/verification.md` — the state machine, thresholds, vendor coupling
+  (fallback is a different operator) and the `device-mode=home` diagnostics.
 - Documentation brought up to the 0.2.0 code: the five translated READMEs
   (`README.ru.md`, `README.de.md`, `README.zh.md`, `README.hi.md`,
   `README.es.md`) were written before the 0.2.0 changes landed and still
