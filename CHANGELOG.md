@@ -6,6 +6,10 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_No unreleased changes._
+
+## [0.3.1] - 2026-10-28
+
 ### Added
 - `routeros/02-security-policies.rsc` — `enforcement=strict` mode: blocks DoT
   (TCP 853) and the well-known public DoH endpoints (address-list `public-doh`),
@@ -145,6 +149,7 @@ Initial tested release.
 - Client DoH/DoT is not blocked; classic DNS (53) is redirected, DoT (853) has
   an optional block rule.
 
-[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.2.0...v0.3.1
 [v0.2.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.1.0...v0.2.0
 [v0.1.0]: https://github.com/paulmann/mikrotik-doh-failover/releases/tag/v0.1.0
