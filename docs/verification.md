@@ -61,6 +61,7 @@ to see each transition logged:
 :global DNSFailCount; :set DNSFailCount 0
 :global DNSRecoverCount; :set DNSRecoverCount 0
 :global DNSFailoverAttempts; :set DNSFailoverAttempts 0
+:global DNSMonitorRunning; :set DNSMonitorRunning false
 ```
 
 | # | Scenario | Setup | Expected |
@@ -76,6 +77,7 @@ to see each transition logged:
 | 9 | wrong clock | set the year back, run monitor | log `CLOCK_INVALID: clock looks wrong …`, nothing else |
 | 10 | device-mode home | run the monitor on a `home` device | log `MONITOR_DISABLED_BY_DEVICE_MODE …`, state `manual-only` |
 | 11 | CAPsMAN clients | rejoin a client | client gets the router as DNS and resolves through it |
+| 12 | concurrency guard | `:global DNSMonitorRunning; :set DNSMonitorRunning true`, run the monitor | log `DNS monitor: skipped — a previous run is still active`, state unchanged |
 
 Restore after each destructive test:
 
@@ -86,6 +88,7 @@ Restore after each destructive test:
 :global DNSFailCount; :set DNSFailCount 0
 :global DNSRecoverCount; :set DNSRecoverCount 0
 :global DNSFailoverAttempts; :set DNSFailoverAttempts 0
+:global DNSMonitorRunning; :set DNSMonitorRunning false
 ```
 
 ## device-mode `home`

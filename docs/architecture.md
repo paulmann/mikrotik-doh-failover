@@ -170,6 +170,22 @@ is probed **before** switching and the switch is verified **after**, with an
 automatic rollback to the primary if the fallback does not resolve. The router
 therefore never ends up parked on a dead endpoint.
 
+**Endpoint-driven failover (0.3.1).** The content check resolves canaries through
+the *live resolver*, which serves from cache. A primary that dies while the cache
+still holds valid answers therefore looked "healthy" and the failover was delayed
+by the cache TTL. Since 0.3.1 a failover is triggered when the **endpoint** probe
+(`probeA`) is unreachable **or** no usable answers come back, so the switch happens
+before the cache expires.
+
+**Concurrency guard (0.3.1).** The scheduler can fire again before a slow run
+finishes. A global flag (`DNSMonitorRunning`) makes the second run skip, and the
+flag is cleared in an `on-error` handler, so a crashed run cannot leave the
+monitor permanently locked.
+
+**Clock range (0.3.1).** The monitor refuses to act on a date outside `2025..2035`
+— a future date passes a "year < 2025" check but still breaks `verify-doh-cert`
+(the certificate is not valid yet).
+
 ## 4. Threat model
 
 - **Local attacker / passive ISP**: DoH hides query names and content from the

@@ -142,7 +142,7 @@ flowchart LR
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
     Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
-    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor["health monitor every interval (60s)"] -->|"3 canaries, content judged"| Resolver
     Monitor -->|"/tool fetch probe"| DoH
     Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
@@ -153,8 +153,8 @@ flowchart LR
 Der Monitor schaltet `use-doh-server` nie um, um einen Endpunkt zu testen: Die
 Probe ist eine HTTPS-Anfrage aus `/tool fetch`, sodass eine Routineprüfung
 `/ip dns` unberührt lässt. Die Zustandsmaschine (Diagramm:
-[`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) ist `healthy` → `stub`
-→ `dead` → `failoverB` und protokolliert nur Übergänge.
+[`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) ist `healthy` → `suspect`
+→ `fallback` → `recovering` → `healthy` und protokolliert nur Übergänge.
 
 | Komponente | Aufgabe |
 |---|---|

@@ -26,6 +26,12 @@ uses [Semantic Versioning](https://semver.org/).
   default, was a hardcoded 3m); `failureThreshold`/`recoveryThreshold` hysteresis
   as the anti-flap mechanism; `MONITOR_DISABLED_BY_DEVICE_MODE` diagnostics for
   `device-mode=home`; wording "managed failover" instead of implying transparency.
+- `routeros/05-dns-health-monitor.rsc` (hardening) — concurrency guard: an
+  overlapping scheduler run is skipped and the flag is cleared in an `on-error`
+  handler, so a crashed run cannot leave the monitor locked; failover is driven by
+  **endpoint health** together with the content check, so a primary that dies
+  while the cache still holds answers is detected before the cache TTL expires;
+  the clock guard rejects dates outside `2025..2035` (past **and** future).
 - `routeros/config.example.rsc` — new tunables: `monitorInterval`,
   `failureThreshold`, `recoveryThreshold`, `enforcement`.
 - `docs/architecture.md`, `README.md`, `docs/troubleshooting.md`,
@@ -42,9 +48,13 @@ uses [Semantic Versioning](https://semver.org/).
   pinned ref moved from `v0.1.0` to `v0.2.0`.
 - Wiki pages updated for 0.2.0: failover is DoH to DoH, the health check judges
   answer content, and the Zabbix fleet monitoring has its own page.
-- `SECURITY.md`: supported version is 0.2.0.
+- `SECURITY.md`: supported version is 0.3.1 (on `main`), last tag `v0.2.0`.
 
 ### Fixed
+- `routeros/05-dns-health-monitor.rsc` — **recovery flapping**: the monitor used
+  to switch back to the primary as soon as the *fallback* answered, without
+  checking that the primary was reachable again, so a primary that stayed down
+  caused an A↔B flap. Recovery is now gated on `probeA == "ok"`.
 - `CHANGELOG.md`: the 0.2.0 section claimed six Zabbix triggers; the setup script
   creates five (`TRIGGERS` in `zabbix/doh-zabbix-setup.py`). The `AGENTS.md` and
   social-preview entries of v0.1.0 that had drifted under the 0.2.0 heading are

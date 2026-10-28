@@ -23,12 +23,11 @@ and adds a scheduled health-check that switches endpoints on failure. It is the
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 on `sysadministrator.ru`.
 
-> **Documentation status.** Version covered: **0.2.0** (tag `v0.2.0`,
-> 2026-10-26). Counts in "By the numbers" were measured with `git ls-files` and
-> `Get-ChildItem` on `main` on 2026-10-26, after the 0.2.0 documentation pass.
-> Behaviour was verified on RouterOS 7.23.1 and 7.24.5; anything not verified on
-> a device is marked as such in the text, and `device-mode` is named wherever it
-> changes the outcome.
+> **Documentation status.** `main` is at **0.3.1** (unreleased); the last tagged
+> release is **v0.2.0**. Counts in "By the numbers" were re-measured on
+> 2026-10-28. Behaviour was verified on RouterOS 7.23.1 and 7.24.5; anything not
+> verified on a device is marked as such in the text, and `device-mode` is named
+> wherever it changes the outcome.
 
 ---
 
@@ -152,6 +151,12 @@ full definition in [`docs/architecture.md`](docs/architecture.md)) is
 `degraded`, `clock-invalid` and `manual-only` as terminal/edge states. Failover
 is **managed**, not transparent: the upstream operator changes, so answers,
 filtering and geo behaviour may change too.
+
+Two hardening measures since 0.3.1: a failover is triggered by **endpoint
+health** (`probeA`) as well as by the content check, so a primary that dies while
+the cache still holds answers is detected before the cache expires; and a
+concurrency guard skips an overlapping scheduler run (the flag is cleared in an
+`on-error` handler, so a crashed run cannot leave the monitor locked).
 
 | Component | Responsibility |
 |---|---|

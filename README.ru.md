@@ -138,7 +138,7 @@ flowchart LR
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
     Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
-    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor["health monitor every interval (60s)"] -->|"3 canaries, content judged"| Resolver
     Monitor -->|"/tool fetch probe"| DoH
     Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
@@ -149,7 +149,7 @@ flowchart LR
 Монитор никогда не переключает `use-doh-server`, чтобы что-то проверить: зонд — это
 HTTPS-запрос через `/tool fetch`, поэтому обычная проверка не трогает `/ip dns`.
 Состояния (схема: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)) —
-`healthy` → `stub` → `dead` → `failoverB`, запись в журнал только при переходе.
+`healthy` → `suspect` → `fallback` → `recovering` → `healthy`, запись в журнал только при переходе.
 
 | Компонент | Задача |
 |---|---|

@@ -126,7 +126,7 @@ flowchart LR
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
     Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
-    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor["health monitor every interval (60s)"] -->|"3 canaries, content judged"| Resolver
     Monitor -->|"/tool fetch probe"| DoH
     Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
@@ -137,7 +137,7 @@ flowchart LR
 监控器从不通过切换 `use-doh-server` 来测试端点：探测是从 `/tool fetch` 发出的
 HTTPS 请求，因此例行检查不会改动 `/ip dns`。状态机
 （图见 [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd)）
-为 `healthy` → `stub` → `dead` → `failoverB`，只在状态跃迁时记录日志。
+为 `healthy` → `suspect` → `fallback` → `recovering` → `healthy`，只在状态跃迁时记录日志。
 
 | 组件 | 职责 |
 |---|---|

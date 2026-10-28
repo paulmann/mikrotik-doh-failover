@@ -139,7 +139,7 @@ flowchart LR
     Resolver --> Mode{"DoH healthy?"}
     Mode -->|"yes"| DoH["DoH A<br/>verify-doh-cert=yes"]
     Mode -->|"no"| DoHB["DoH B (dns.google)<br/>switched by the monitor"]
-    Monitor["health monitor every 3 min"] -->|"3 canaries, content judged"| Resolver
+    Monitor["health monitor every interval (60s)"] -->|"3 canaries, content judged"| Resolver
     Monitor -->|"/tool fetch probe"| DoH
     Monitor -->|"probe before switch<br/>rollback on failure"| DoHB
     CA["Trusted CA"] -->|"TLS validation"| DoH
@@ -150,7 +150,7 @@ flowchart LR
 Monitor endpoint जाँचने के लिए कभी `use-doh-server` नहीं बदलता: probe `/tool fetch`
 से भेजा गया HTTPS अनुरोध है, इसलिए नियमित जाँच `/ip dns` को अछूता छोड़ देती है।
 State machine (आरेख: [`diagrams/dns-failover.mmd`](diagrams/dns-failover.mmd))
-है `healthy` → `stub` → `dead` → `failoverB`, लॉग केवल संक्रमणों पर।
+है `healthy` → `suspect` → `fallback` → `recovering` → `healthy`, लॉग केवल संक्रमणों पर।
 
 | घटक | ज़िम्मेदारी |
 |---|---|
