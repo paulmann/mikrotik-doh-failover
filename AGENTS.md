@@ -21,7 +21,7 @@ switch, rolls back if the fallback does not resolve, and returns to the primary
 after recovery. Plain DNS is bootstrap only — it is not a working fallback. It is
 configuration, not software: nothing is installed, nothing runs outside the
 router, and the only running piece is a RouterOS scheduler entry that executes a
-RouterOS script every 3 minutes.
+RouterOS script every interval (60 s default).
 
 | | |
 |---|---|
@@ -31,7 +31,7 @@ RouterOS script every 3 minutes.
 | Default upstream | `https://cloudflare-dns.com/dns-query` — the **standard**, non-filtering resolver; `servers=1.1.1.1,1.0.0.1` are bootstrap only |
 | Failover target | `https://dns.google/dns-query` — a second **DoH** endpoint, never plain DNS |
 | Writes to | the router's own configuration: `/certificate`, `/ip dns`, `/ip dns static`, `/ip firewall nat`, `/ip firewall filter`, `/system script`, `/system scheduler`, optionally `/caps-man` and `/ip dhcp-server network`. No repository file is written by any script |
-| Network access | both DoH endpoints on TCP 443 (the monitor probes them every 3 minutes); IP-based NTP servers during setup. No telemetry, no callback, no repository traffic |
+| Network access | both DoH endpoints on TCP 443 (the monitor probes them every interval, 60 s default); IP-based NTP servers during setup. No telemetry, no callback, no repository traffic |
 | Not shipped | no installer, no package, no service, no CI, no issue templates — and neither release carries assets (`gh release view v0.2.0 --json assets` → `[]`, same for `v0.1.0`) |
 
 `zabbix/` (fleet monitoring) exists on `main` but is **after** the `v0.2.0` tag:

@@ -40,7 +40,7 @@ flowchart LR
     Resolver --> Mode{DoH endpoint answers?}
     Mode -->|yes| DoH[DoH A<br/>verify-doh-cert=yes]
     Mode -->|no| DoHB[DoH B<br/>switched by monitor]
-    Monitor[health monitor<br/>every 3 min] -->|content check + probe| Resolver
+    Monitor[health monitor<br/>every interval (60s)] -->|content check + probe| Resolver
     Monitor -->|switch / rollback| Mode
     CA[Trusted CA] -->|TLS validation| DoH
     CA -->|TLS validation| DoHB
