@@ -74,7 +74,7 @@
 # --- 1: clock ---
 :local clock [/system clock get date]
 :local year [:tonum [:pick $clock 0 4]]
-:if ($year < 2025) do={
+:if (($year < 2025) or ($year > 2035)) do={
     :if ($DNSMonitorState != "clock-invalid") do={
         :set DNSMonitorState "clock-invalid"
         :log error ("CLOCK_INVALID: clock looks wrong (" . $clock . ") — certificate validation cannot succeed; enable NTP")
@@ -120,17 +120,27 @@
         :set DNSFailCount 0
         :set DNSFailoverAttempts 0
         :if (($DNSMonitorState = "fallback") or ($DNSMonitorState = "recovering")) do={
-            :set DNSRecoverCount ($DNSRecoverCount + 1)
-            :if ($DNSRecoverCount >= $recoveryThreshold) do={
-                /ip dns set use-doh-server=$dohUrlA verify-doh-cert=yes
-                /ip dns cache flush
-                :set DNSMonitorState "healthy"
-                :set DNSRecoverCount 0
-                :log warning "HEALTHY: primary DoH answers again — switched back from the fallback"
+            :if ($probeA = "ok") do={
+                # primary endpoint is reachable again — count up before coming home
+                :set DNSRecoverCount ($DNSRecoverCount + 1)
+                :if ($DNSRecoverCount >= $recoveryThreshold) do={
+                    /ip dns set use-doh-server=$dohUrlA verify-doh-cert=yes
+                    /ip dns cache flush
+                    :set DNSMonitorState "healthy"
+                    :set DNSRecoverCount 0
+                    :log warning "HEALTHY: primary DoH answers again — switched back from the fallback"
+                } else={
+                    :if ($DNSMonitorState != "recovering") do={
+                        :set DNSMonitorState "recovering"
+                        :log info ("RECOVERING: primary answers again (" . $DNSRecoverCount . "/" . $recoveryThreshold . ")")
+                    }
+                }
             } else={
-                :if ($DNSMonitorState != "recovering") do={
-                    :set DNSMonitorState "recovering"
-                    :log info ("RECOVERING: primary answers again (" . $DNSRecoverCount . "/" . $recoveryThreshold . ")")
+                # primary still unreachable — reset the recovery progress and stay
+                :set DNSRecoverCount 0
+                :if ($DNSMonitorState != "fallback") do={
+                    :set DNSMonitorState "fallback"
+                    :log info "RECOVERING: primary still unreachable — staying on the fallback"
                 }
             }
         } else={
