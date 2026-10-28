@@ -6,7 +6,18 @@ uses [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_No unreleased changes._
+### Added
+- `routeros/05-dns-health-monitor.rsc` — ordered failover chain: primary →
+  secondary → tertiary (`dohUrlC`, optional, empty disables it) → plain DNS
+  (`plainFallback`, optional). The plain step is logged `PRIVACY DEGRADED`, and a
+  new `plain` state recovers back to the primary once it answers again.
+
+### Changed
+- `routeros/05-dns-health-monitor.rsc` — the probe now uses
+  `/tool fetch ... as-value output=user` (the response body comes back in memory),
+  removing the temporary files in `/file` and the cleanup races. The JSON check
+  tolerates both `"Status":0` and `"Status": 0`.
+- New tunables: `dohUrlC`, `probeUrlC`, `plainFallback`, `plainServers`.
 
 ## [0.3.1] - 2026-10-28
 
