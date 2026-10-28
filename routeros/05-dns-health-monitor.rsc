@@ -1,8 +1,18 @@
-# 05-dns-health-monitor.rsc — version 3.1 (0.3.x)
+# 05-dns-health-monitor.rsc — version 4.0 (0.4.x)
 # Managed DoH-to-DoH failover with content-aware probing and an explicit state
 # machine. This is MANAGED failover (the upstream changes on a fault), not
 # "transparent" failover: primary and fallback are different operators and may
 # answer differently (filtering, geo, CDN steering).
+#
+# CHANGES IN 4.0 (relative to 3.1)
+#   1. Probe rewritten to `/tool fetch ... as-value output=user`: the response
+#      body comes back in memory, so there are no temporary files in /file and no
+#      cleanup races. The JSON check also tolerates "Status":0 / "Status": 0.
+#   2. Ordered failover chain: primary -> secondary -> tertiary (dohUrlC, optional,
+#      empty disables it) -> plain DNS (plainFallback, optional). The plain step is
+#      an explicit last resort logged as PRIVACY DEGRADED.
+#   3. New state "plain" (on the plain-DNS fallback) and recovery from it back to
+#      the primary once the primary endpoint answers again.
 #
 # CHANGES IN 3.1 (relative to 3.0)
 #   1. Concurrency guard: a run that overlaps the previous one is skipped, and
@@ -15,10 +25,9 @@
 #      OR no usable answers, so the monitor fails over before the cache expires.
 #
 # Kept from 3.0: the explicit state machine (HEALTHY / SUSPECT / FALLBACK /
-# RECOVERING / STUB / DEGRADED / CLOCK_INVALID / MANUAL-ONLY), the hysteresis
-# thresholds, the clock range guard, the non-disruptive /tool fetch probe, the
-# probe-before-switch and verify-after-switch with rollback, maxAttempts, and the
-# narrow policy.
+# RECOVERING / STUB / DEGRADED / CLOCK_INVALID / MANUAL-ONLY / PLAIN), the
+# hysteresis thresholds, the clock range guard, the probe-before-switch and
+# verify-after-switch with rollback, maxAttempts, and the narrow policy.
 
 :local monitorInterval "60s"
     # scheduler interval; 45-60s for an office, 3m acceptable for home
@@ -30,6 +39,13 @@
 :local probeUrlA    "https://cloudflare-dns.com/dns-query?name=example.com&type=A"
 :local dohUrlB      "https://dns.google/dns-query"
 :local probeUrlB    "https://dns.google/resolve?name=example.com&type=A"
+:local dohUrlC      ""
+:local probeUrlC    ""
+:local plainFallback false
+:local plainServers "1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4"
+# dohUrlC / probeUrlC: optional tertiary DoH endpoint; leave empty to disable (the probe must speak DNS-JSON)
+# plainFallback: switch to plain DNS if ALL DoH endpoints fail (privacy downgrade, logged PRIVACY DEGRADED)
+# plainServers: the plain resolvers used when plainFallback is true
 :local probeGood    {"example.com";"cdnjs.cloudflare.com";"cdn.tailwindcss.com"}
 :local stubPrefixes {"8.6.112.";"8.47.69."}
 :local filtering    false
@@ -80,12 +96,12 @@
                 # --- 3: probe the primary endpoint (HTTPS, does not touch /ip dns) ---
                 :local probeA "unreachable"
                 :do {
-                    /file remove [find name="doh-health-a.json"]
-                    /tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" dst-path="doh-health-a.json" mode=https
-                    :local body [:tostr [/file get "doh-health-a.json" contents]]
-                    :if ([:find $body "\"Status\":0"] >= 0) do={ :set probeA "ok" } else={ :set probeA "bad-status" }
+                    :local rA [/tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                    :local bodyA ($rA->"data")
+                    :if (($rA->"status") = "finished") do={
+                        :if (([:find $bodyA "\"Status\":0"] >= 0) or ([:find $bodyA "\"Status\": 0"] >= 0)) do={ :set probeA "ok" } else={ :set probeA "bad-status" }
+                    } else={ :set probeA "unreachable" }
                 } on-error={ :set probeA "unreachable" }
-                /file remove [find name="doh-health-a.json"]
 
                 # --- 4: content check (answer quality via the live resolver) ---
                 :local bad 0
@@ -118,7 +134,7 @@
                         :log warning ("STUB: answers are the stub pair — " . $detail . "If CDNs do not open here the pair is unreachable from this network: confirm from a client with curl --resolve (docs/troubleshooting.md §6.10). Switching the resolver does not help")
                     }
                 } else={
-                    :if (($DNSMonitorState = "fallback") or ($DNSMonitorState = "recovering")) do={
+                    :if (($DNSMonitorState = "fallback") or ($DNSMonitorState = "recovering") or ($DNSMonitorState = "plain")) do={
                         # ON THE FALLBACK — decide whether to come home
                         :if ($probeA = "ok") do={
                             :set DNSRecoverCount ($DNSRecoverCount + 1)
@@ -136,22 +152,24 @@
                             }
                         } else={
                             :set DNSRecoverCount 0
-                            :if ($DNSMonitorState != "fallback") do={
-                                :set DNSMonitorState "fallback"
-                                :log info "RECOVERING: primary still unreachable — staying on the fallback"
-                            }
-                            :local probeB "unreachable"
-                            :do {
-                                /file remove [find name="doh-health-b.json"]
-                                /tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" dst-path="doh-health-b.json" mode=https
-                                :local bodyB [:tostr [/file get "doh-health-b.json" contents]]
-                                :if ([:find $bodyB "\"Status\":0"] >= 0) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
-                            } on-error={ :set probeB "unreachable" }
-                            /file remove [find name="doh-health-b.json"]
-                            :if ($probeB != "ok") do={
-                                :if ($DNSMonitorState != "degraded") do={
-                                    :set DNSMonitorState "degraded"
-                                    :log error "DEGRADED: primary down and fallback unreachable — keeping the current configuration"
+                            :if ($DNSMonitorState != "plain") do={
+                                :if ($DNSMonitorState != "fallback") do={
+                                    :set DNSMonitorState "fallback"
+                                    :log info "RECOVERING: primary still unreachable — staying on the fallback"
+                                }
+                                :local probeB "unreachable"
+                                :do {
+                                    :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                    :local bodyB ($rB->"data")
+                                    :if (($rB->"status") = "finished") do={
+                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                    } else={ :set probeB "unreachable" }
+                                } on-error={ :set probeB "unreachable" }
+                                :if ($probeB != "ok") do={
+                                    :if ($DNSMonitorState != "degraded") do={
+                                        :set DNSMonitorState "degraded"
+                                        :log error "DEGRADED: primary down and fallback unreachable — keeping the current configuration"
+                                    }
                                 }
                             }
                         }
@@ -170,12 +188,12 @@
                                 :if (($applyChanges) and ($DNSFailoverAttempts < $maxAttempts)) do={
                                     :local probeB "unreachable"
                                     :do {
-                                        /file remove [find name="doh-health-b.json"]
-                                        /tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" dst-path="doh-health-b.json" mode=https
-                                        :local bodyB [:tostr [/file get "doh-health-b.json" contents]]
-                                        :if ([:find $bodyB "\"Status\":0"] >= 0) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                        :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                        :local bodyB ($rB->"data")
+                                        :if (($rB->"status") = "finished") do={
+                                            :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                        } else={ :set probeB "unreachable" }
                                     } on-error={ :set probeB "unreachable" }
-                                    /file remove [find name="doh-health-b.json"]
                                     :if ($probeB = "ok") do={
                                         :set DNSFailoverAttempts ($DNSFailoverAttempts + 1)
                                         /ip dns set use-doh-server=$dohUrlB verify-doh-cert=yes
@@ -194,9 +212,36 @@
                                             :log error "DEGRADED: fallback DoH did not resolve either — rolled back to the primary; check the CA for the fallback host"
                                         }
                                     } else={
-                                        :if ($DNSMonitorState != "degraded") do={
-                                            :set DNSMonitorState "degraded"
-                                            :log error ("DEGRADED: both endpoints unreachable (primary " . $probeA . ", fallback " . $probeB . ") — keeping the current configuration")
+                                        :local probeC "unreachable"
+                                        :if ([:len $dohUrlC] > 0) do={
+                                            :do {
+                                                :local rC [/tool fetch url=$probeUrlC http-header-field="accept: application/dns-json" mode=https as-value output=user]
+                                                :local bodyC ($rC->"data")
+                                                :if (($rC->"status") = "finished") do={
+                                                    :if (([:find $bodyC "\"Status\":0"] >= 0) or ([:find $bodyC "\"Status\": 0"] >= 0)) do={ :set probeC "ok" } else={ :set probeC "bad-status" }
+                                                } else={ :set probeC "unreachable" }
+                                            } on-error={ :set probeC "unreachable" }
+                                        }
+                                        :if ($probeC = "ok") do={
+                                            /ip dns set use-doh-server=$dohUrlC verify-doh-cert=yes
+                                            /ip dns cache flush
+                                            :set DNSMonitorState "fallback"
+                                            :set DNSRecoverCount 0
+                                            :log warning ("FALLBACK: primary and secondary down — switched to tertiary DoH (" . $dohUrlC . ")")
+                                        } else={
+                                            :if ($plainFallback) do={
+                                                /ip dns set use-doh-server=""
+                                                /ip dns set servers=$plainServers
+                                                /ip dns cache flush
+                                                :set DNSMonitorState "plain"
+                                                :set DNSRecoverCount 0
+                                                :log error "PRIVACY DEGRADED: all DoH endpoints unreachable — switched to plain DNS (no encryption)"
+                                            } else={
+                                                :if ($DNSMonitorState != "degraded") do={
+                                                    :set DNSMonitorState "degraded"
+                                                    :log error ("DEGRADED: all DoH endpoints unreachable (primary " . $probeA . ", fallback " . $probeB . ") — keeping the current configuration")
+                                                }
+                                            }
                                         }
                                     }
                                 } else={
