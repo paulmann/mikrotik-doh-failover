@@ -8,6 +8,22 @@ uses [Semantic Versioning](https://semver.org/).
 
 _No unreleased changes._
 
+## [0.4.1] - 2026-10-28
+
+### Changed
+- `routeros/05-dns-health-monitor.rsc` — every `/tool fetch` probe now carries
+  `duration=5s`, so a hung endpoint cannot block the run past the scheduler
+  interval (verified on RouterOS 7.23.1).
+- The tertiary switch now does the same verify-after-switch with rollback as the
+  secondary, and every real switch (secondary, tertiary, plain) increments
+  `DNSFailoverAttempts`, so the counter reflects the whole chain.
+
+### Fixed
+- `routeros/05-dns-health-monitor.rsc` — recovery from the plain fallback now
+  climbs back to **any** DoH endpoint, not only the primary: if the primary is
+  still down but the secondary answers, the monitor leaves plain DNS and returns
+  to DoH (clearing `servers`).
+
 ## [0.4.0] - 2026-10-28
 
 ### Added
@@ -164,7 +180,8 @@ Initial tested release.
 - Client DoH/DoT is not blocked; classic DNS (53) is redirected, DoT (853) has
   an optional block rule.
 
-[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.2.0...v0.3.1
 [v0.2.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.1.0...v0.2.0
