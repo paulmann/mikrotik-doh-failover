@@ -1,11 +1,12 @@
-# AGENTS.md — mikrotik-doh-failover 0.2.0
+# AGENTS.md — mikrotik-doh-failover 0.3.1
 
 Agent-facing operational contract: how to fetch these scripts, apply them to a
 RouterOS device, verify every step, and roll back. Human documentation:
 [README.md](README.md) and [docs/](docs/); change rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Verified against repository state on 2026-10-26, commit `81fbd10`, tag
-> `v0.2.0`. Pin raw URLs to the tag (or a commit) — `main` is ahead of the tag.
+> Verified against repository state on 2026-10-28, commit `38ef7e0`, on `main`
+> (0.3.1, unreleased); the last tagged release is `v0.2.0`. Pin raw URLs to a
+> commit — `main` is ahead of the tag.
 > Every command below is quoted from `routeros/`; every "expect" line is what
 > `docs/verification.md` records from the test fleet. No router was touched while
 > writing this file — a `.rsc` change is unverified until it has been imported on
@@ -60,15 +61,15 @@ unless `02-security-policies.rsc` (or equivalent drop rules) is applied first.
 ### 3.1 From a clone (the only route that includes docs and the tunables reference)
 
 ```bash
-git clone --depth 1 --branch v0.2.0 https://github.com/paulmann/mikrotik-doh-failover.git
+git clone --depth 1 https://github.com/paulmann/mikrotik-doh-failover.git && git checkout 38ef7e0
 ```
 
 ### 3.2 Individual files, pinned
 
 ```bash
 # pin the ref: main moves, a tag does not
-curl -fLO https://raw.githubusercontent.com/paulmann/mikrotik-doh-failover/v0.2.0/certs/cloudflare-doh-ca.crt
-curl -fLO https://raw.githubusercontent.com/paulmann/mikrotik-doh-failover/v0.2.0/routeros/01-configure-doh.rsc
+curl -fLO https://raw.githubusercontent.com/paulmann/mikrotik-doh-failover/38ef7e0/certs/cloudflare-doh-ca.crt
+curl -fLO https://raw.githubusercontent.com/paulmann/mikrotik-doh-failover/38ef7e0/routeros/01-configure-doh.rsc
 ```
 
 ### 3.3 Check what you got before importing
@@ -139,17 +140,20 @@ Run these after §4. The expected values are the ones recorded in
 | Resolver protection | `/ip firewall filter print where comment~"DNS"` | accept UDP+TCP from LAN, drop UDP+TCP from WAN |
 | Real resolution | `/ip dns cache flush` then `:put [:resolve example.com]` | `104.20.x` / `172.66.x`; **not** `8.6.112.0` / `8.47.69.0` |
 | Content judged | resolve all three canaries | at least one real address; the stub pair counts as unusable |
-| Mode | `:put $DNSMonitorState` | `healthy` after a clean run (`stub`, `dead`, `failoverB` are the other three) |
+| Mode | `:put $DNSMonitorState` | `healthy` after a clean run; the other states are `suspect`, `stub`, `fallback`, `recovering`, `degraded`, `clock-invalid`, `manual-only` (see §5.1) |
 | Attempts | `:put $DNSFailoverAttempts` | `0` while the primary answers |
 | Endpoint probe | `/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" http-header-field="accept: application/dns-json" dst-path="doh.json" mode=https` | HTTP 200 and `"Status":0` inside `doh.json` |
 | Errors | `/log print where message~"connection error"` | nothing, on a healthy setup |
 
-**How the monitor judges an answer (0.2.0).** Three canaries —
+**How the monitor judges an answer (0.3.1).** Three canaries —
 `example.com`, `cdnjs.cloudflare.com`, `cdn.tailwindcss.com` — are resolved
 through the live resolver and the *content* is checked: empty, `0.0.0.0`, or a
-prefix from `8.6.112.` / `8.47.69.` counts as unusable. The 0.1.0 test
-(`[:typeof $ip] = "ip"`) no longer exists, and neither does the global
-`DNSCurrentMode`; state lives in `DNSMonitorState` and `DNSFailoverAttempts`.
+prefix from `8.6.112.` / `8.47.69.` counts as unusable. A failover is triggered
+by **endpoint health** (`probeA` unreachable) OR by no usable answers, after
+`failureThreshold` consecutive runs; recovery needs `recoveryThreshold`
+consecutive good runs and the primary endpoint to answer. State lives in
+`DNSMonitorState`, `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` and
+`DNSMonitorRunning`.
 
 Do not conclude "DoH is down" from `/tool fetch` alone: a `400` (POST) or `405`
 (GET) means the TLS handshake and certificate validation **succeeded**. The
@@ -167,6 +171,26 @@ Measured oddities worth knowing before you "fix" a script:
 - Quad9 answers `DoH unable to decode BASE64-URL` to the JSON probe, so it
   cannot be the fallback while `probeUrlB` points at it (§6.12 of
   `docs/troubleshooting.md`).
+
+### 5.1 State machine
+
+```text
+HEALTHY --canary fails / endpoint down--> SUSPECT
+SUSPECT --canary passes / endpoint up--> HEALTHY
+SUSPECT --failureThreshold bad runs--> FALLBACK   (fallback probed before, verified after)
+FALLBACK --primary passes once--> RECOVERING
+RECOVERING --recoveryThreshold good runs--> HEALTHY
+RECOVERING --primary fails again--> FALLBACK
+SUSPECT / FALLBACK --both endpoints unreachable--> DEGRADED
+any --answers are the stub pair--> STUB          (not a failover-able fault)
+any --device-mode=home--> MANUAL-ONLY
+```
+
+Transitions are logged with an UPPERCASE tag (`HEALTHY`, `SUSPECT`, `FALLBACK`,
+`RECOVERING`, `STUB`, `DEGRADED`, `CLOCK_INVALID`, `MONITOR_DISABLED_BY_DEVICE_MODE`).
+`failureThreshold` and `recoveryThreshold` (both 2) are the anti-flap hysteresis;
+`monitorInterval` (60 s default) is the scheduler period. The monitor refuses to
+act on a clock date outside `2025..2035`.
 
 ## 6. Configure
 
@@ -200,7 +224,7 @@ it and never reads it, so no behaviour and no log line depends on it.
 | One device at a time, verify before the next | a broken step 2 on ten routers is ten networks without DNS |
 | Read an empty result correctly | `use-doh-server=""` means "plain mode", not "broken"; an empty `/log print where comment~"connection error"` is the healthy state; a failed `:resolve` is a `failure:` string, not an empty value |
 | Guard state reads in scripts | the monitor wraps `:resolve` in `:do {} on-error={}` so a failed lookup does not abort the run — do the same in anything you add |
-| Know where the state lives | two globals: `DNSMonitorState` (`healthy`/`stub`/`dead`/`failoverB`) and `DNSFailoverAttempts` (reset to `0` whenever an answer is usable). They live in memory: a reboot clears them, and the monitor then logs its first transition again |
+| Know where the state lives | five globals: `DNSMonitorState` (`healthy`/`suspect`/`stub`/`fallback`/`recovering`/`degraded`/`clock-invalid`/`manual-only`), `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` (reset to `0` whenever the primary answers) and `DNSMonitorRunning` (the concurrency guard). They live in memory: a reboot clears them, and the monitor then logs its first transition again |
 
 Minimal non-interactive pipeline on a device that already has the files:
 
