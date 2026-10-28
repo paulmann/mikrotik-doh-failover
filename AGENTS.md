@@ -4,8 +4,8 @@ Agent-facing operational contract: how to fetch these scripts, apply them to a
 RouterOS device, verify every step, and roll back. Human documentation:
 [README.md](README.md) and [docs/](docs/); change rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Verified against repository state on 2026-10-28, tagged `v0.4.0`
-> (commit `306959e`). Pin raw URLs to a commit — `main` may be ahead of the tag. Pin raw URLs to a
+> Verified against repository state on 2026-10-28, tagged `v0.4.1`
+> (commit `6465028`). Pin raw URLs to a commit — `main` may be ahead of the tag. Pin raw URLs to a
 > commit — `main` is ahead of the tag.
 > Every command below is quoted from `routeros/`; every "expect" line is what
 > `docs/verification.md` records from the test fleet. No router was touched while
@@ -145,7 +145,7 @@ Run these after §4. The expected values are the ones recorded in
 | Endpoint probe | `:local r [/tool fetch url="https://cloudflare-dns.com/dns-query?name=example.com&type=A" http-header-field="accept: application/dns-json" mode=https as-value output=user]; :put ($r->"status"); :put ([:find ($r->"data") "\"Status\":0"])` | `finished` and a non-negative `:find` position (no temp file) |
 | Errors | `/log print where message~"connection error"` | nothing, on a healthy setup |
 
-**How the monitor judges an answer (0.4.0).** Three canaries —
+**How the monitor judges an answer (0.4.1).** Three canaries —
 `example.com`, `cdnjs.cloudflare.com`, `cdn.tailwindcss.com` — are resolved
 through the live resolver and the *content* is checked: empty, `0.0.0.0`, or a
 prefix from `8.6.112.` / `8.47.69.` counts as unusable. A failover is triggered
@@ -153,9 +153,11 @@ by **endpoint health** (`probeA` unreachable) OR by no usable answers, after
 `failureThreshold` consecutive runs; recovery needs `recoveryThreshold`
 consecutive good runs and the primary endpoint to answer. Since 0.4.0 the ordering
 is primary → secondary → tertiary (`dohUrlC`, optional) → plain DNS
-(`plainFallback`, optional, logged `PRIVACY DEGRADED`). State lives in
-`DNSMonitorState`, `DNSFailCount`, `DNSRecoverCount`, `DNSFailoverAttempts` and
-`DNSMonitorRunning`.
+(`plainFallback`, optional, logged `PRIVACY DEGRADED`); since 0.4.1 every probe
+fetch carries `duration=5s`, the tertiary is verified after the switch with a
+rollback, and recovery climbs from plain back to any DoH endpoint (not only the
+primary). State lives in `DNSMonitorState`, `DNSFailCount`, `DNSRecoverCount`,
+`DNSFailoverAttempts` and `DNSMonitorRunning`.
 
 Do not conclude "DoH is down" from `/tool fetch` alone: a `400` (POST) or `405`
 (GET) means the TLS handshake and certificate validation **succeeded**. The

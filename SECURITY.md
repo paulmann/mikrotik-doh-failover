@@ -4,8 +4,9 @@
 
 | Version | Supported |
 |---|---|
-| v0.4.0 (tagged, 2026-10-28) | yes — ordered DoH chain + optional plain fallback, in-memory probe, state machine, concurrency guard, endpoint-driven failover |
-| v0.3.1 (tagged, 2026-10-28) | yes — last tagged release |
+| v0.4.1 (tagged, 2026-10-28) | yes — hard fetch timeout, symmetric tertiary verify, plain→DoH recovery |
+| v0.4.0 (tagged, 2026-10-28) | no |
+| v0.3.1 (tagged, 2026-10-28) | no |
 | v0.2.0 (tagged, 2026-10-26) | no |
 | v0.1.0 | no — the health check there accepted the stub pair `8.6.112.0`/`8.47.69.0` as a healthy answer and fell back to plain DNS |
 
