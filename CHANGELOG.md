@@ -8,6 +8,22 @@ uses [Semantic Versioning](https://semver.org/).
 
 _No unreleased changes._
 
+## [0.4.3] - 2026-11-02
+
+### Fixed
+- Failover was blocked in `probeMode "resolve"`: the fallback endpoint was still probed
+  with a DNS-JSON request, and a self-hosted endpoint answers `400` to that request, so
+  `probeB` never became `ok` and the router stayed on a dead primary. In resolve mode the
+  fallback is now switched to directly; the quality check after the switch still rolls
+  back if the new endpoint answers badly.
+- The fallback probe in the other branch now also reports `substituted`, matching the
+  primary probe: a substituted answer is not a healthy endpoint.
+
+### Changed
+- Documentation: how to run a reserve endpoint on a separate host, including the
+  `dnsdist 2.x` pitfall (plain-HTTP DoH there is HTTP/2-only, so a small gateway that
+  speaks HTTP/1.1 is used instead).
+
 ## [0.4.2] - 2026-11-02
 
 ### Added
@@ -211,7 +227,8 @@ Initial tested release.
 - Client DoH/DoT is not blocked; classic DNS (53) is redirected, DoT (853) has
   an optional block rule.
 
-[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.3.1...v0.4.0

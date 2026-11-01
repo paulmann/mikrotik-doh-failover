@@ -292,3 +292,52 @@ curl -s -H 'accept: application/dns-json' \
 If the two answers differ, the path is intercepted and no resolver setting on the
 router can repair it. Read the configured stub prefixes from your own network: the
 default pair in `stubPrefixes` is one operator's example, not a universal value.
+
+## 6.14 A reserve endpoint on a separate host
+
+A failover between two public resolvers is weak: both sit behind the same path, so both get
+substituted together (§6.13). A reserve that actually helps is your own resolver on a host
+that is not on the broken path — typically the same machine that terminates your tunnel.
+
+The working shape, and the one thing that will stop you:
+
+| Layer | What it is |
+|---|---|
+| TLS | your existing web server on 443, one extra `location = /dns-query` |
+| access control | `allow`/`deny` in that location — the endpoint is public, the list is not |
+| DoH front end | something that speaks HTTP/1.1 on loopback and forwards to the resolver |
+| resolver | `unbound`, `forward-tls-upstream` to `1.1.1.1@853` / `9.9.9.9@853` |
+
+**The pitfall:** on Ubuntu 26.04 the packaged `dnsdist` is 2.x, and its plain-HTTP DoH
+listener is HTTP/2-only. It answers an HTTP/1.1 request with an HTTP/2 frame, so the client
+sees `BadStatusLine` / `000`, and nginx cannot proxy to it at all (nginx has no HTTP/2
+upstream for `proxy_pass`). `h2=false` is not a valid option — dnsdist reports
+`Unknown key 'h2' given - ignored`.
+
+Two options that work:
+
+1. `dnsdist` 1.7 as on Debian 12 — `addDOHLocal(..., nil, nil, {"/dns-query"})` serves
+   HTTP/1.1 and is proxied by nginx without fuss.
+2. A ~40-line gateway: `http.server` on `127.0.0.1:8053`, POST body → UDP to the resolver,
+   answer back. No dependencies, HTTP/1.1, easy to read. This is what the reference setup
+   uses where `dnsdist` 2.x is packaged.
+
+`unbound` itself cannot sit behind a plaintext reverse proxy: `http-endpoint` requires TLS
+(`tls-service-key` / `tls-service-pem`), and the packaged service usually cannot read a
+Let's Encrypt key without a copy and a deploy hook.
+
+Verify, in this order:
+
+```
+# the gateway alone
+curl -s -o /dev/null -w '%{http_code}\n' -X POST \
+  -H 'content-type: application/dns-message' --data-binary @q.bin http://127.0.0.1:8053/dns-query
+
+# through nginx, from the host itself
+curl -s -o /dev/null -w '%{http_code}\n' https://doh.example.org/dns-query   # 400 is correct: GET is not DoH
+
+# from a client, with the real wire format
+# 200 + honest addresses = works; 403 = the address is not in the allow list
+```
+
+A `400` on a plain GET means TLS and the route are fine — it is the same signal as in §6.9.

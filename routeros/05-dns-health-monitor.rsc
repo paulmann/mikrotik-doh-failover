@@ -1,4 +1,4 @@
-# 05-dns-health-monitor.rsc — version 4.2 (0.4.2)
+# 05-dns-health-monitor.rsc — version 4.3 (0.4.3)
 # Managed DoH-to-DoH failover with content-aware probing and an explicit state
 # machine. This is MANAGED failover (the upstream changes on a fault), not
 # "transparent" failover: primary and fallback are different operators and may
@@ -272,13 +272,27 @@
                             :if ($DNSFailCount >= $failureThreshold) do={
                                 :if (($applyChanges) and ($DNSFailoverAttempts < $maxAttempts)) do={
                                     :local probeB "unreachable"
+                                    # In resolve mode the fallback is not probed over DNS-JSON:
+                                    # a self-hosted endpoint answers 400 to that request, and
+                                    # failing here would block the switch entirely. The quality
+                                    # check after the switch (:resolve below) still rolls back.
+                                    :if ($probeMode = "resolve") do={ :set probeB "ok" }
+                                    :if ($probeMode != "resolve") do={
                                     :do {
                                         :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                         :local bodyB ($rB->"data")
                                         :if (($rB->"status") = "finished") do={
-                                            :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                            :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={
+                                                :set probeB "ok"
+                                                # same rule as for the primary: a substituted answer
+                                                # is not a healthy endpoint
+                                                :foreach p in=$stubPrefixes do={
+                                                    :if ([:find $bodyB $p] >= 0) do={ :set probeB "substituted" }
+                                                }
+                                            } else={ :set probeB "bad-status" }
                                         } else={ :set probeB "unreachable" }
                                     } on-error={ :set probeB "unreachable" }
+                                    }
                                     :if ($probeB = "ok") do={
                                         :set DNSFailoverAttempts ($DNSFailoverAttempts + 1)
                                         /ip dns set use-doh-server=$dohUrlB verify-doh-cert=yes

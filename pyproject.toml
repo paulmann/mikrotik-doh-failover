@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mikrotik-doh-failover"
-version = "0.4.2"
+version = "0.4.3"
 description = "Zabbix-side tools for a verified DoH failover scheme on MikroTik RouterOS"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -30,7 +30,7 @@ Homepage = "https://github.com/paulmann/mikrotik-doh-failover"
 Repository = "https://github.com/paulmann/mikrotik-doh-failover"
 Documentation = "https://github.com/paulmann/mikrotik-doh-failover/wiki"
 Changelog = "https://github.com/paulmann/mikrotik-doh-failover/blob/main/CHANGELOG.md"
-"Release notes" = "https://github.com/paulmann/mikrotik-doh-failover/blob/main/docs/release-notes-v0.4.2.md"
+"Release notes" = "https://github.com/paulmann/mikrotik-doh-failover/blob/main/docs/release-notes-v0.4.3.md"
 
 [project.scripts]
 doh-zabbix-setup = "mikrotik_doh_failover.zabbix_setup:main"

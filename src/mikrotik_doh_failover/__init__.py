@@ -11,5 +11,5 @@ tools, so they can be installed and upgraded like any other Python program:
 
 from __future__ import annotations
 
-__version__ = "0.4.2"
+__version__ = "0.4.3"
 __all__ = ["__version__"]
