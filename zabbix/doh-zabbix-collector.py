@@ -9,6 +9,7 @@ SSH (ключ SSH) и отправляет значения trapper-элемен
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 import sys
@@ -18,7 +19,7 @@ import time
 SSH = "/usr/bin/ssh"
 KEY = "~/.ssh/id_router"
 USER = "admin"
-SENDER = "/usr/local/bin/zabbix_sender"
+SENDER = os.environ.get("ZBX_SENDER", "/usr/local/bin/zabbix_sender")
 ZBX_HOST = "127.0.0.1"
 ZBX_PORT = "10051"
 
@@ -156,6 +157,12 @@ def send(host: str, values: list[tuple[str, str]]) -> bool:
         res = subprocess.run(cmd, input=payload, capture_output=True, text=True, timeout=30)
     except subprocess.TimeoutExpired:
         return False
+    except FileNotFoundError:
+        raise SystemExit(
+            f"zabbix_sender not found (looked for {SENDER!r}). Install the Zabbix sender "
+            "package (Debian/Ubuntu: apt install zabbix-sender) or set ZBX_SENDER to its "
+            "full path."
+        ) from None
     ok = res.returncode == 0 and "failed: 0" in (res.stdout or "")
     if not ok:
         print(f"  ! {host}: sender rc={res.returncode} {(res.stdout or '').strip()} {(res.stderr or '').strip()[:120]}")

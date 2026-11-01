@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mikrotik-doh-failover"
+version = "0.4.2"
+description = "Zabbix-side tools for a verified DoH failover scheme on MikroTik RouterOS"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mikhail Deynekin", email = "Mikhail@Deynekin.com" }]
+keywords = ["mikrotik", "routeros", "doh", "dns-over-https", "zabbix", "failover", "monitoring"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/paulmann/mikrotik-doh-failover"
+Repository = "https://github.com/paulmann/mikrotik-doh-failover"
+Documentation = "https://github.com/paulmann/mikrotik-doh-failover/wiki"
+Changelog = "https://github.com/paulmann/mikrotik-doh-failover/blob/main/CHANGELOG.md"
+"Release notes" = "https://github.com/paulmann/mikrotik-doh-failover/blob/main/docs/release-notes-v0.4.2.md"
+
+[project.scripts]
+doh-zabbix-setup = "mikrotik_doh_failover.zabbix_setup:main"
+doh-zabbix-collector = "mikrotik_doh_failover.zabbix_collector:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+mikrotik_doh_failover = ["py.typed"]

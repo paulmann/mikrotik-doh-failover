@@ -34,6 +34,11 @@ _No unreleased changes._
 - zabbix collector/setup and their READMEs no longer carry the maintainer's real
   addresses, host names or site names (neutral examples instead).
 
+- Published on PyPI as `mikrotik-doh-failover` (0.4.2): the Zabbix tools from `zabbix/`
+  are available as `doh-zabbix-setup` and `doh-zabbix-collector`. Credentials are read at
+  run time, so importing the modules no longer requires `ZBX_USER`/`ZBX_PASSWORD`; a missing
+  `zabbix_sender` now produces a clear message instead of a traceback.
+
 ## [0.4.1] - 2026-10-28
 
 ### Changed

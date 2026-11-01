@@ -10,6 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/paulmann/mikrotik-doh-failover?label=release&sort=semver)](https://github.com/paulmann/mikrotik-doh-failover/releases)
 [![RouterOS](https://img.shields.io/badge/RouterOS-7.20%2B-red)](https://help.mikrotik.com/docs/spaces/ROS/pages/37748767/DNS)
+[![PyPI](https://img.shields.io/pypi/v/mikrotik-doh-failover?label=PyPI)](https://pypi.org/project/mikrotik-doh-failover/)
 
 <img src="https://github.com/paulmann/mikrotik-doh-failover/raw/main/assets/social-preview.png"
      alt="mikrotik-doh-failover: one verified DoH upstream for RouterOS, with a second verified DoH endpoint as failover"
@@ -68,6 +69,22 @@ This project avoids both:
   cover the Cloudflare chain on 7.23/7.24;
 - **bootstrap static A records for both endpoint hosts**, so the health probe
   can reach them even when the resolver itself is dead.
+
+## Install the packaging tools (optional)
+
+The RouterOS scripts are copied by hand — they are not installable, and that is
+deliberate: a router configuration is read, diffed and reviewed, not `pip install`ed.
+The Zabbix-side tools in `zabbix/` are ordinary Python programs, so they ship as a package:
+
+```bash
+pip install mikrotik-doh-failover
+doh-zabbix-setup       # provision host/items/triggers in Zabbix
+doh-zabbix-collector   # send one round of values (cron/systemd timer)
+```
+
+Credentials come from the environment (`ZBX_USER`, `ZBX_PASSWORD`), the sender path from
+`ZBX_SENDER`; nothing is read from the file. Installing the package is optional — the same
+scripts run unmodified from a checkout.
 
 ## What changed in 0.4.2
 

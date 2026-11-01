@@ -31,8 +31,15 @@ def _credential(name: str) -> str:
 
 
 API = "https://22877.ru/api_jsonrpc.php"
-USER = _credential("ZBX_USER")
-PASSWORD = _credential("ZBX_PASSWORD")
+# Read lazily: importing the module must not require credentials. The values are
+# resolved in main(), so the same code works as a library and as a console script.
+USER = ""
+PASSWORD = ""
+
+
+def _load_credentials() -> tuple[str, str]:
+    """Resolve API credentials; raises SystemExit when the environment lacks them."""
+    return _credential("ZBX_USER"), _credential("ZBX_PASSWORD")
 
 GROUP = "MikroTik DoH"
 DOH_ROOT = "DoH на микротиках"
@@ -206,6 +213,8 @@ def rename_vpn_root() -> str | None:
 
 
 def main() -> int:
+    global USER, PASSWORD
+    USER, PASSWORD = _load_credentials()
     login()
     ensure_group()
     drop_duplicates()
