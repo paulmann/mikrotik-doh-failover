@@ -18,3 +18,4 @@ _scratch*/
 dist/
 build/
 *.egg-info/
+.work-release/
