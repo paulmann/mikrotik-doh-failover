@@ -42,16 +42,16 @@ VPN_GROUP = "Микротики"
 
 # адрес, площадка, ожидается ли туннель
 DEVICES = [
-    ("192.168.31.1", "офис, шлюз (Chateau PRO ax)", True),
-    ("192.168.31.2", "офис, точка доступа (cAP ax)", False),
-    ("192.168.31.9", "тестовый стенд (hAP ax²)", False),
-    ("192.168.1.1", "площадка Флотская", True),
-    ("192.168.3.1", "площадка ILAB", True),
-    ("192.168.4.1", "площадка Нарвская", True),
+    ("10.10.10.1", "офис, шлюз (gateway)", True),
+    ("10.10.10.2", "офис, точка доступа (access point)", False),
+    ("10.10.10.9", "тестовый стенд (test bench)", False),
+    ("10.20.1.1", "site A", True),
+    ("10.20.3.1", "site B", True),
+    ("10.20.4.1", "site C", True),
 ]
 
 # хосты-дубли, созданные ранее этим же скриптом (удаляются)
-DUPLICATES = ["mt-hub", "mt-cap", "mt-test", "mt-flotskaya", "mt-ilab", "mt-narvskaya"]
+DUPLICATES = ["mt-1-1", "mt-2-1", "mt-3-1", "mt-4-1", "mt-9-1", "mt-10-1"]
 
 CTX = ssl.create_default_context()
 CTX.check_hostname = False
@@ -156,13 +156,13 @@ TRIGGERS = [
     ("DoH не работает", "last(/{host}/doh.state)=2", 4, "service", "doh",
      "Резолвер не отдал ни одного пригодного адреса. Смотреть /log print where message~\"DNS monitor\" на устройстве."),
     ("Нет данных о состоянии DoH", "nodata(/{host}/doh.state,15m)=1", 2, "service", "doh",
-     "Коллектор не присылает значения 15 минут: systemctl status doh-zabbix-collector.timer на 192.168.31.31."),
+     "Коллектор не присылает значения 15 минут: systemctl status doh-zabbix-collector.timer на 10.10.10.10."),
     ("VPN-туннель лежит", "last(/{host}/vpn.state)=2", 4, "service", "vpn",
      "Нет пиров wireguard или рукопожатий нет дольше 15 минут. Проверить /interface wireguard peers print и доступность concentrator'а."),
     ("VPN-туннель нестабилен", "last(/{host}/vpn.state)=1", 2, "service", "vpn",
      "Рукопожатие старше 5 минут: туннель переустанавливается или теряет пакеты."),
     ("Нет данных о состоянии VPN", "nodata(/{host}/vpn.state,15m)=1", 2, "service", "vpn",
-     "Коллектор не присылает значения 15 минут: systemctl status doh-zabbix-collector.timer на 192.168.31.31."),
+     "Коллектор не присылает значения 15 минут: systemctl status doh-zabbix-collector.timer на 10.10.10.10."),
 ]
 
 
@@ -232,7 +232,7 @@ def main() -> int:
 
     # --- DoH ---
     doh_root = ensure_service(DOH_ROOT, None, [], 1, 1,
-                              "DoH на всех микротиках: состояние снимает коллектор на 192.168.31.31.")
+                              "DoH на всех микротиках: состояние снимает коллектор на 10.10.10.10.")
     for host, _hid, _exp in hosts:
         ensure_service(f"{DOH_ROOT} / {host}", [doh_root],
                        [{"tag": "service", "value": "doh", "operator": 0},

@@ -229,3 +229,66 @@ support:
 Quad9 is fine as a DoH upstream for the router, but it cannot be probed this
 way, so a Quad9 fallback would always look "unreachable". Use Google as the
 fallback, or change `probeUrlB` to something your fallback does support.
+
+**A self-hosted endpoint has the same problem** — and a worse consequence. Your own
+resolver serves wire format, not DNS-JSON, so the probe reports `bad-status` for a
+perfectly healthy primary and the monitor moves the router onto a public fallback.
+That is the wrong direction: the fallback is exactly where answers get substituted
+(see §6.13).
+
+Since 0.4.2 set `probeMode "resolve"` for such endpoints. Liveness is then judged by
+the quality of the live resolver answers (`:resolve` + the stub check), with no
+external request at all:
+
+```
+:local probeMode    "resolve"                       # own endpoint, no JSON API
+:local dohUrlA      "https://doh.example.net/dns-query"
+:local probeUrlA    ""                              # not used in resolve mode
+```
+
+## 6.13 The network substitutes DoH answers as well
+
+The resolver looks healthy, the probe returns `Status: 0`, and clients still get
+addresses that open nothing.
+
+Measured 2026-11-01. The same URL on both sides:
+
+| Where the request went | Answer for the same name |
+|---|---|
+| from the router, over its normal uplink | `8.6.112.0`, `8.47.69.0` (stub pair) |
+| from a host whose DNS left through an encrypted tunnel | `104.18.32.47`, `172.64.155.209` (real) |
+
+Same name, same DoH endpoint, same certificate — different answers. The substitution
+happens on the router's path, not at the resolver. It is also **unstable**: repeated
+queries to the same endpoint alternate between honest and stubbed answers, so a single
+successful probe proves nothing.
+
+What follows:
+
+1. `Status: 0` is not proof of an honest answer. Since 0.4.2 the probe also checks the
+   payload for stub prefixes and reports `substituted` instead of `ok`.
+2. Failover between public operators does not help. If the network substitutes the
+   path, Cloudflare, Google and Quad9 all answer with the same stub pair.
+3. Filtering resolvers — `1.1.1.3`, `1.0.0.3`, anything advertised as "family" — answer
+   stubs for filtered names by design. Never use them as the health baseline, and never
+   use them to bypass filtering.
+4. The only reliable fix is a path the network does not intercept: your own resolver on
+   a host whose traffic is already inside an encrypted tunnel, published over DoH, used
+   as `dohUrlA` with `probeMode "resolve"`. Rule of thumb: if a client on the same LAN
+   opens the sites but the router's resolver does not, the difference is the path, not
+   the resolver.
+
+How to tell the two apart in one minute (replace the name and the endpoint):
+
+```
+# from the router
+/tool fetch url="https://doh.example.org/dns-query?name=example.com&type=A"     http-header-field="accept: application/dns-json" output=user
+
+# from a host behind your own tunnel, same URL
+curl -s -H 'accept: application/dns-json' \
+     "https://doh.example.org/dns-query?name=example.com&type=A"
+```
+
+If the two answers differ, the path is intercepted and no resolver setting on the
+router can repair it. Read the configured stub prefixes from your own network: the
+default pair in `stubPrefixes` is one operator's example, not a universal value.

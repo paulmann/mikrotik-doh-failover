@@ -4,6 +4,7 @@
 
 | Version | Supported |
 |---|---|
+| v0.4.2 (2026-11-02) | yes — probe detects substituted answers, cache-flush before STUB, probeMode for self-hosted endpoints |
 | v0.4.1 (tagged, 2026-10-28) | yes — hard fetch timeout, symmetric tertiary verify, plain→DoH recovery |
 | v0.4.0 (tagged, 2026-10-28) | no |
 | v0.3.1 (tagged, 2026-10-28) | no |

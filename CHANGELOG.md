@@ -8,6 +8,32 @@ uses [Semantic Versioning](https://semver.org/).
 
 _No unreleased changes._
 
+## [0.4.2] - 2026-11-02
+
+### Added
+- `routeros/05-dns-health-monitor.rsc` — `probeMode` (`"json"` | `"resolve"`).
+  A self-hosted DoH endpoint serves wire format and has no DNS-JSON API, so the JSON
+  probe reported a healthy primary as `bad-status` and pushed the router onto a public
+  fallback. `"resolve"` judges liveness by the quality of live answers instead
+  (docs/troubleshooting.md §6.12).
+- `docs/troubleshooting.md` §6.13 — the network can substitute DoH answers too: same
+  URL, same certificate, honest answer on one path and the stub pair on another.
+  Includes a one-minute way to tell substitution from an outage.
+
+### Changed
+- Stub detection is no longer satisfied by `"Status":0`: the probe also looks for the
+  configured stub prefixes in the payload and reports `substituted`. A substituting
+  network returns a syntactically perfect answer, so the status alone proves nothing.
+- On `STUB` the monitor flushes the cache once and re-checks before declaring the state.
+  A stub cached while the path was intercepted stayed until TTL and looked permanent —
+  measured: after the resolver changed, flushed cache returned honest answers.
+- `STUB` message now says what it means: the path is intercepted and changing the
+  resolver alone will not help.
+
+### Fixed
+- zabbix collector/setup and their READMEs no longer carry the maintainer's real
+  addresses, host names or site names (neutral examples instead).
+
 ## [0.4.1] - 2026-10-28
 
 ### Changed
@@ -180,7 +206,8 @@ Initial tested release.
 - Client DoH/DoT is not blocked; classic DNS (53) is redirected, DoT (853) has
   an optional block rule.
 
-[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/paulmann/mikrotik-doh-failover/compare/v0.2.0...v0.3.1

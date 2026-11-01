@@ -4,7 +4,7 @@ Agent-facing operational contract: how to fetch these scripts, apply them to a
 RouterOS device, verify every step, and roll back. Human documentation:
 [README.md](README.md) and [docs/](docs/); change rules: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-> Verified against repository state on 2026-10-28, tagged `v0.4.1`
+> Verified against repository state on 2026-11-02 (release `v0.4.2`)
 > (commit `6465028`). Pin raw URLs to a commit — `main` may be ahead of the tag. Pin raw URLs to a
 > commit — `main` is ahead of the tag.
 > Every command below is quoted from `routeros/`; every "expect" line is what

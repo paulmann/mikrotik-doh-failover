@@ -103,6 +103,17 @@ unreachable and keeps the current configuration.
 
 ## Verified results
 
+### 0.4.2 — re-verified 2026-11-02 on RouterOS 7.24.5 (office gateway)
+
+| Check | How | Observed |
+|---|---|---|
+| `probeMode` accepted | script set from file, run by hand | no parse error; `DNSMonitorState=healthy`, settings untouched |
+| `substituted` detection | probe payload containing a stub address | reported as `substituted`, not `ok` |
+| `STUB_CLEARED` path | stub prefixes forced to match a live answer | cache flush, re-check, state returned to `healthy` |
+| `STUB` path | stub prefixes forced, answers unchanged after flush | `STUB:` logged with per-name detail, resolver left as is |
+| self-hosted endpoint | `probeMode "resolve"`, own DoH as primary | `healthy`, no fallback switching, answers honest |
+| failed probe does not act | `applyChanges=false` runs | no `/ip dns` change in three consecutive runs |
+
 ### 0.2.0 — re-verified 2026-10-26 on RouterOS 7.23.1 (hAP ax², test box)
 
 | Check | Command | Observed |

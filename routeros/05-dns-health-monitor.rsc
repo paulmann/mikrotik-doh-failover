@@ -1,4 +1,4 @@
-# 05-dns-health-monitor.rsc — version 4.1 (0.4.x)
+# 05-dns-health-monitor.rsc — version 4.2 (0.4.2)
 # Managed DoH-to-DoH failover with content-aware probing and an explicit state
 # machine. This is MANAGED failover (the upstream changes on a fault), not
 # "transparent" failover: primary and fallback are different operators and may
@@ -51,6 +51,13 @@
 :local probeUrlB    "https://dns.google/resolve?name=example.com&type=A"
 :local dohUrlC      ""
 :local probeUrlC    ""
+# probeMode: how "is the endpoint alive" is decided.
+#   "json"    — fetch the DNS-JSON probe URL (works for public resolvers);
+#   "resolve" — judge by the quality of the live resolver answers only. Use this
+#               for a self-hosted DoH endpoint: it serves wire format, not DNS-JSON,
+#               so a JSON probe would wrongly report it as dead and push the router
+#               onto a public fallback (where answers are often substituted).
+:local probeMode    "json"
 :local plainFallback false
 :local plainServers "1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4"
 # dohUrlC / probeUrlC: optional tertiary DoH endpoint; leave empty to disable (the probe must speak DNS-JSON)
@@ -105,12 +112,22 @@
 
                 # --- 3: probe the primary endpoint (HTTPS, does not touch /ip dns) ---
                 :local probeA "unreachable"
+                :if ($probeMode = "resolve") do={ :set probeA "skip" }
                 :do {
-                    :local rA [/tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
-                    :local bodyA ($rA->"data")
-                    :if (($rA->"status") = "finished") do={
-                        :if (([:find $bodyA "\"Status\":0"] >= 0) or ([:find $bodyA "\"Status\": 0"] >= 0)) do={ :set probeA "ok" } else={ :set probeA "bad-status" }
-                    } else={ :set probeA "unreachable" }
+                    :if ($probeMode != "resolve") do={
+                        :local rA [/tool fetch url=$probeUrlA http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
+                        :local bodyA ($rA->"data")
+                        :if (($rA->"status") = "finished") do={
+                            :if (([:find $bodyA "\"Status\":0"] >= 0) or ([:find $bodyA "\"Status\": 0"] >= 0)) do={
+                                :set probeA "ok"
+                                # Status:0 is not proof of honesty: a substituting network
+                                # returns Status 0 with a stub address. Check the payload.
+                                :foreach p in=$stubPrefixes do={
+                                    :if ([:find $bodyA $p] >= 0) do={ :set probeA "substituted" }
+                                }
+                            } else={ :set probeA "bad-status" }
+                        } else={ :set probeA "unreachable" }
+                    }
                 } on-error={ :set probeA "unreachable" }
 
                 # --- 4: content check (answer quality via the live resolver) ---
@@ -136,12 +153,42 @@
                     :set detail ($detail . $d . "=" . $ip . $mark . "; ")
                 }
 
+                # in resolve mode the liveness of the primary is judged by the answers
+                :if ($probeMode = "resolve") do={
+                    :if (($good > 0) and ($stubSeen = 0)) do={ :set probeA "ok" } else={ :set probeA "bad-status" }
+                }
+
                 # --- 5: state machine ---
                 :if ($stubSeen = 1) do={
                     :set DNSRecoverCount 0
-                    :if ($DNSMonitorState != "stub") do={
-                        :set DNSMonitorState "stub"
-                        :log warning ("STUB: answers are the stub pair — " . $detail . "If CDNs do not open here the pair is unreachable from this network: confirm from a client with curl --resolve (docs/troubleshooting.md §6.10). Switching the resolver does not help")
+                    # A stub can be a leftover in the cache: an answer cached while the
+                    # path was substituted stays until TTL expires, no matter how good
+                    # the resolver is now. Flush once and re-check before declaring.
+                    /ip dns cache flush
+                    :delay 2s
+                    :local stubAfter 0
+                    :local detailAfter ""
+                    :foreach d2 in=$probeGood do={
+                        :local ip2 ""
+                        :do { :set ip2 [:tostr [:resolve $d2]] } on-error={ :set ip2 "" }
+                        :if ([:len $ip2] > 0) do={
+                            :foreach p in=$stubPrefixes do={
+                                :if ([:find $ip2 $p] >= 0) do={ :set stubAfter 1 }
+                            }
+                        }
+                        :set detailAfter ($detailAfter . $d2 . "=" . $ip2 . "; ")
+                    }
+                    :if ($stubAfter = 0) do={
+                        :set DNSFailCount 0
+                        :if ($DNSMonitorState != "healthy") do={
+                            :set DNSMonitorState "healthy"
+                            :log info ("STUB_CLEARED: stubs came from the cache, a flush returned sane answers — " . $detailAfter)
+                        }
+                    } else={
+                        :if ($DNSMonitorState != "stub") do={
+                            :set DNSMonitorState "stub"
+                            :log warning ("STUB: answers are the stub pair even after a cache flush — " . $detailAfter . "The network substitutes DNS answers on this path; switching the resolver alone will not help. Confirm from a client and use an encrypted path that is not intercepted (docs/troubleshooting.md §6.10).")
+                        }
                     }
                 } else={
                     :if (($DNSMonitorState = "fallback") or ($DNSMonitorState = "recovering") or ($DNSMonitorState = "plain")) do={
@@ -168,9 +215,15 @@
                                     :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                     :local bodyB ($rB->"data")
                                     :if (($rB->"status") = "finished") do={
-                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={
+                                            :set probeB "ok"
+                                            :foreach p in=$stubPrefixes do={
+                                                :if ([:find $bodyB $p] >= 0) do={ :set probeB "substituted" }
+                                            }
+                                        } else={ :set probeB "bad-status" }
                                     } else={ :set probeB "unreachable" }
                                 } on-error={ :set probeB "unreachable" }
+                                :if ($probeMode = "resolve") do={ :set probeB "ok" }
                                 :if ($probeB = "ok") do={
                                     /ip dns set use-doh-server=$dohUrlB verify-doh-cert=yes
                                     /ip dns set servers=""
@@ -188,9 +241,15 @@
                                     :local rB [/tool fetch url=$probeUrlB http-header-field="accept: application/dns-json" mode=https as-value output=user duration=5s]
                                     :local bodyB ($rB->"data")
                                     :if (($rB->"status") = "finished") do={
-                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={ :set probeB "ok" } else={ :set probeB "bad-status" }
+                                        :if (([:find $bodyB "\"Status\":0"] >= 0) or ([:find $bodyB "\"Status\": 0"] >= 0)) do={
+                                            :set probeB "ok"
+                                            :foreach p in=$stubPrefixes do={
+                                                :if ([:find $bodyB $p] >= 0) do={ :set probeB "substituted" }
+                                            }
+                                        } else={ :set probeB "bad-status" }
                                     } else={ :set probeB "unreachable" }
                                 } on-error={ :set probeB "unreachable" }
+                                :if ($probeMode = "resolve") do={ :set probeB "ok" }
                                 :if ($probeB != "ok") do={
                                     :if ($DNSMonitorState != "degraded") do={
                                         :set DNSMonitorState "degraded"

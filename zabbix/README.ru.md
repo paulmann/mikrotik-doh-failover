@@ -2,15 +2,15 @@
 
 English version: [README.md](README.md).
 
-Схема: коллектор на `192.168.31.31` (hp-debian) раз в 2 минуты опрашивает каждый
+Схема: коллектор на `10.10.10.10` (collector-host) раз в 2 минуты опрашивает каждый
 роутер по SSH и отправляет значения trapper-элементам Zabbix. Сами роутеры ничего
 не шлют — на устройстве с `device-mode=home` это невозможно (`fetch` и `scheduler`
 там закрыты).
 
 ```
-192.168.31.31 (hp-debian)
+10.10.10.10 (collector-host)
   doh-zabbix-collector.timer  ->  doh-zabbix-collector.service
-        |  ssh chateau-md@<роутер>   (ключ /root/.ssh/id_mikrotik_agent)
+        |  ssh admin@<роутер>   (ключ ~/.ssh/id_router)
         v
   RouterOS: :resolve трех канареек + /ip dns get use-doh-server
             + /interface wireguard peers last-handshake
@@ -27,12 +27,12 @@ English version: [README.md](README.md).
 
 | Хост | Адрес | Роль | Ожидаются пиры VPN |
 |---|---|---|---|
-| `mt-31-1` | 192.168.31.1 | офис, шлюз (Chateau PRO ax) | да |
-| `mt-31-2` | 192.168.31.2 | офис, точка доступа (cAP ax) | нет |
-| `mt-31-9` | 192.168.31.9 | тестовый стенд (hAP ax²) | нет |
-| `mt-1-1` | 192.168.1.1 | площадка Флотская | да |
-| `mt-3-1` | 192.168.3.1 | площадка ILAB | да |
-| `mt-4-1` | 192.168.4.1 | площадка Нарвская | да |
+| `mt-31-1` | 10.10.10.1 | офис, шлюз (gateway) | да |
+| `mt-31-2` | 10.10.10.2 | офис, точка доступа (access point) | нет |
+| `mt-31-9` | 10.10.10.9 | тестовый стенд (test bench) | нет |
+| `mt-1-1` | 10.20.1.1 | site A | да |
+| `mt-3-1` | 10.20.3.1 | site B | да |
+| `mt-4-1` | 10.20.4.1 | site C | да |
 
 Список живёт в `DEVICES` обоих скриптов; списки обязаны совпадать.
 
@@ -113,7 +113,7 @@ VPN                       (бывший «VPN Гжатская», переиме
 export ZBX_USER=... ZBX_PASSWORD=...        # логин API, в файле его нет
 python3 doh-zabbix-setup.py
 
-# 2. коллектор и таймер на 192.168.31.31
+# 2. коллектор и таймер на 10.10.10.10
 install -m 755 doh-zabbix-collector.py /usr/local/bin/
 # юниты — в репозитории: systemd/doh-zabbix-collector.{service,timer}
 systemctl daemon-reload && systemctl enable --now doh-zabbix-collector.timer
@@ -124,7 +124,7 @@ journalctl -u doh-zabbix-collector.service -n 10
 ```
 
 Требования на сервере: `zabbix_sender` (`/usr/local/bin/zabbix_sender`), ключ
-`/root/.ssh/id_mikrotik_agent` с доступом `chateau-md@` на каждый роутер,
+`~/.ssh/id_router` с доступом `admin@` на каждый роутер,
 в `known_hosts` — актуальные ключи хостов (иначе ssh откажет).
 
 Учётные данные в репозитории **не хранятся**: `doh-zabbix-setup.py` берёт логин и

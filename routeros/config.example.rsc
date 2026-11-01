@@ -26,6 +26,10 @@
 # CDN steering). There is no multi-endpoint list in RouterOS — one active
 # use-doh-server — so "a list of fallbacks" is at most "try one, then another".
 :global dohUrlB    "https://dns.google/dns-query"                 # fallback
+# probeMode (0.4.2): "json" probes the DNS-JSON URL; "resolve" judges the primary
+# by the quality of live answers only — use it for a self-hosted endpoint, which
+# serves wire format and cannot answer a JSON probe.
+:global probeMode   "json"
 :global probeUrlA  "https://cloudflare-dns.com/dns-query?name=example.com&type=A"
 :global probeUrlB  "https://dns.google/resolve?name=example.com&type=A"
 # Optional tertiary DoH endpoint (0.4.0). Leave BOTH empty to disable it. The probe

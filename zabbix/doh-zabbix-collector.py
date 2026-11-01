@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Сбор состояния DoH и VPN с микротиков и отправка в Zabbix.
 
-Запускается по таймеру на 192.168.31.31 под root. Опрашивает каждый роутер по
-SSH (ключ id_mikrotik_agent) и отправляет значения trapper-элементам Zabbix
+Запускается по таймеру на 10.10.10.10 под root. Опрашивает каждый роутер по
+SSH (ключ SSH) и отправляет значения trapper-элементам Zabbix
 через zabbix_sender.
 
 На роутерах ничего не меняет: только чтение и три :resolve.
@@ -16,20 +16,20 @@ import tempfile
 import time
 
 SSH = "/usr/bin/ssh"
-KEY = "/root/.ssh/id_mikrotik_agent"
-USER = "chateau-md"
+KEY = "~/.ssh/id_router"
+USER = "admin"
 SENDER = "/usr/local/bin/zabbix_sender"
 ZBX_HOST = "127.0.0.1"
 ZBX_PORT = "10051"
 
 # Zabbix-хост, адрес, площадка, ожидается ли VPN-туннель с пирами
 DEVICES = [
-    ("mt-31-1", "192.168.31.1", "офис, шлюз (Chateau PRO ax)", True),
-    ("mt-31-2", "192.168.31.2", "офис, точка доступа (cAP ax)", False),
-    ("mt-31-9", "192.168.31.9", "тестовый стенд (hAP ax²)", False),
-    ("mt-1-1", "192.168.1.1", "площадка Флотская", True),
-    ("mt-3-1", "192.168.3.1", "площадка ILAB", True),
-    ("mt-4-1", "192.168.4.1", "площадка Нарвская", True),
+    ("mt-31-1", "10.10.10.1", "офис, шлюз (gateway)", True),
+    ("mt-31-2", "10.10.10.2", "офис, точка доступа (access point)", False),
+    ("mt-31-9", "10.10.10.9", "тестовый стенд (test bench)", False),
+    ("mt-1-1", "10.20.1.1", "site A", True),
+    ("mt-3-1", "10.20.3.1", "site B", True),
+    ("mt-4-1", "10.20.4.1", "site C", True),
 ]
 
 CANARIES = ["example.com", "cdnjs.cloudflare.com", "cdn.tailwindcss.com"]

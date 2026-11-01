@@ -2,15 +2,15 @@
 
 Русская версия: [README.ru.md](README.ru.md).
 
-Layout: a collector on `192.168.31.31` (hp-debian) asks every router over SSH once
+Layout: a collector on `10.10.10.10` (collector-host) asks every router over SSH once
 every two minutes and pushes the values into Zabbix trapper items. The routers
 themselves send nothing — on a `device-mode=home` box that is impossible
 (`fetch` and `scheduler` are closed there).
 
 ```
-192.168.31.31 (hp-debian)
+10.10.10.10 (collector-host)
   doh-zabbix-collector.timer  ->  doh-zabbix-collector.service
-        |  ssh chateau-md@<router>   (key /root/.ssh/id_mikrotik_agent)
+        |  ssh admin@<router>   (key ~/.ssh/id_router)
         v
   RouterOS: :resolve of three canaries + /ip dns get use-doh-server
             + /interface wireguard peers last-handshake
@@ -27,12 +27,12 @@ Measured from the code in this directory: 6 devices, 8 items, 5 triggers,
 
 | Host | Address | Role | VPN peers expected |
 |---|---|---|---|
-| `mt-31-1` | 192.168.31.1 | office, gateway (Chateau PRO ax) | yes |
-| `mt-31-2` | 192.168.31.2 | office, access point (cAP ax) | no |
-| `mt-31-9` | 192.168.31.9 | test bench (hAP ax²) | no |
-| `mt-1-1` | 192.168.1.1 | Flotskaya site | yes |
-| `mt-3-1` | 192.168.3.1 | ILAB site | yes |
-| `mt-4-1` | 192.168.4.1 | Narvskaya site | yes |
+| `mt-31-1` | 10.10.10.1 | office, gateway (gateway) | yes |
+| `mt-31-2` | 10.10.10.2 | office, access point (access point) | no |
+| `mt-31-9` | 10.10.10.9 | test bench (test bench) | no |
+| `mt-1-1` | 10.20.1.1 | site A | yes |
+| `mt-3-1` | 10.20.3.1 | site B | yes |
+| `mt-4-1` | 10.20.4.1 | site C | yes |
 
 The list lives in `DEVICES` in both scripts; the two lists must stay identical.
 
@@ -113,7 +113,7 @@ Zabbix 8.0 rules that had to be discovered the hard way:
 #    its own earlier duplicate hosts are removed)
 python3 doh-zabbix-setup.py
 
-# 2. collector and timer on 192.168.31.31
+# 2. collector and timer on 10.10.10.10
 install -m 755 doh-zabbix-collector.py /usr/local/bin/
 # units are in the repository: systemd/doh-zabbix-collector.{service,timer}
 systemctl daemon-reload && systemctl enable --now doh-zabbix-collector.timer
@@ -124,7 +124,7 @@ journalctl -u doh-zabbix-collector.service -n 10
 ```
 
 Requirements on the server: `zabbix_sender` (`/usr/local/bin/zabbix_sender`), the
-key `/root/.ssh/id_mikrotik_agent` accepted as `chateau-md@` on every router, and
+key `~/.ssh/id_router` accepted as `admin@` on every router, and
 current host keys in `known_hosts` (otherwise ssh refuses).
 
 Credentials are **not** stored in the repository any more: `doh-zabbix-setup.py`

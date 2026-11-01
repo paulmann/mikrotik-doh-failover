@@ -23,7 +23,7 @@ and adds a scheduled health-check that switches endpoints on failure. It is the
 [«Архитектура отказоустойчивого DNS-over-HTTPS в RouterOS»](https://sysadministrator.ru/%d0%b0%d1%80%d1%85%d0%b8%d1%82%d0%b5%d0%ba%d1%82%d1%83%d1%80%d0%b0-%d0%be%d1%82%d0%ba%d0%b0%d0%b7%d0%be%d1%83%d1%81%d1%82%d0%be%d0%b9%d1%87%d0%b8%d0%b2%d0%be%d0%b3%d0%be-dns-over-https-%d0%b2-routeros/)
 on `sysadministrator.ru`.
 
-> **Documentation status.** Version **v0.4.1** (tagged 2026-10-28). Counts in
+> **Documentation status.** Version **v0.4.2** (2026-11-02). Counts in
 > "By the numbers" were re-measured on 2026-10-28. Behaviour was verified on
 > RouterOS 7.23.1 and 7.24.5; anything not verified on a device is marked as such
 > in the text, and `device-mode` is named wherever it changes the outcome.
@@ -68,6 +68,16 @@ This project avoids both:
   cover the Cloudflare chain on 7.23/7.24;
 - **bootstrap static A records for both endpoint hosts**, so the health probe
   can reach them even when the resolver itself is dead.
+
+## What changed in 0.4.2
+
+- The probe checks the **payload**, not only `"Status":0`: a substituted answer is
+  reported as `substituted`.
+- `probeMode "resolve"` — liveness of a self-hosted endpoint judged by answer quality,
+  because such an endpoint serves wire format and has no DNS-JSON API.
+- `STUB` is declared only after one cache flush and a re-check (`STUB_CLEARED` when the
+  stub was a cache leftover).
+- zabbix part: neutral example addresses instead of the maintainer's own.
 
 ## What changed in 0.4.1
 
@@ -165,6 +175,13 @@ answers, filtering and geo behaviour may change too.
 `"Status":0` and `"Status": 0`. Failover is an ordered chain: primary → secondary →
 tertiary (`dohUrlC`, optional, empty disables it) → plain DNS (`plainFallback`,
 optional, off by default and logged `PRIVACY DEGRADED`).
+
+Since 0.4.2 the probe also asks a second question: is the answer honest? A network that
+substitutes DNS returns a perfect-looking reply `{"Status":0,…, "data":"<stub>"}`, so the
+payload is checked against the configured stub prefixes and reported as `substituted`.
+Use `probeMode "resolve"` when the primary is your own endpoint: it serves wire format,
+has no DNS-JSON API, and judging it by the JSON probe sends the router onto a public
+fallback — the very path where answers are substituted (docs/troubleshooting.md §6.13).
 
 | Component | Responsibility |
 |---|---|

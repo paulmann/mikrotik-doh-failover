@@ -11,6 +11,11 @@
 # STANDARD endpoint too, so switching resolvers is not a cure; see
 # docs/troubleshooting.md §6.10. Choose Family deliberately, for its filtering.
 # 1) NTP first (certificate validation needs accurate time)
+#
+# 0.4.2: never use a filtering resolver as the health baseline or as a way
+# around filtering. Family answers the stub pair for filtered names by design
+# (docs/troubleshooting.md §6.13), so a "healthy" verdict taken from it is
+# meaningless, and sites stay closed.
 /system ntp client set enabled=yes servers=162.159.200.1,216.239.35.0
 # 2) Trust anchor
 /certificate import file-name=cloudflare-doh-ca.crt passphrase=""
